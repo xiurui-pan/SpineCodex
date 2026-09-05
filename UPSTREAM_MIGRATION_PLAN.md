@@ -10,7 +10,7 @@
 
 上游能力沿用目标 release 的默认值、配置开关和适用条件。实验性上下文管理也按上游条件接入；不得通过静默关闭功能、退回旧实现、丢弃历史或增加笼统阻断报错来完成升级。涉及上下文、配置和线程状态的差异，必须在其所属数据结构和生命周期中解决。
 
-用户已授权按本计划开发、合并及定向验证。完整测试套件按 AGENTS.md 在定向测试通过后单独确认；发布保留为后续明确操作。
+用户已授权按本计划开发、合并、完整测试、测试后清理本次任务临时文件及缓存，并将 SpineCodex 0.4.0 安装到本机 WSL。公开发布保留为后续明确操作。
 
 目标 Spine 产品版本：**0.4.0**（用户于执行期间指定）。
 
@@ -59,10 +59,10 @@ P0 基线与差分清单
 ## P0：准备迁移基线
 
 - [x] 核验两个仓库状态、目标 tag 和 SHA；保留已有未提交改动，创建独立开发 worktree。
-- [ ] 建立最终差分清单，覆盖 SDK、历史、配置、采样、Spawn、协议、TUI、身份、打包和测试。
-- [ ] 将 Spine 现有测试映射到本计划的验收矩阵；记录原版本已有失败与环境限制。
-- [ ] 准备人工构造或脱敏的旧版会话 fixtures，覆盖普通会话、分页 lineage、压缩、递归 Spawn、fork、rollback 和中断事务。
-- [ ] 使用隔离的测试配置目录和模型响应 mock，测试 fixtures 不依赖个人 `~/.codex` 数据或真实凭证。
+- [x] 建立最终差分清单，覆盖 SDK、历史、配置、采样、Spawn、协议、TUI、身份、打包和测试。
+- [x] 将 Spine 现有测试映射到本计划的验收矩阵；记录原版本已有失败与环境限制。
+- [x] 准备人工构造或脱敏的旧版会话 fixtures，覆盖普通会话、分页 lineage、压缩、递归 Spawn、fork、rollback 和中断事务。
+- [x] 使用隔离的测试配置目录和模型响应 mock，测试 fixtures 不依赖个人 `~/.codex` 数据或真实凭证。
 
 完成标准：目标固定、定制改动可追踪、旧格式 fixtures 和测试入口明确。
 
@@ -70,13 +70,13 @@ P0 基线与差分清单
 
 主要范围：`codex-rs/spine-core/`、目标新增的 `history/`、`protocol/`、`rollout/`、`thread-store/`、`state/` 和相关 Cargo/Bazel 文件。
 
-- [ ] 将独立 `spine-core` 接入目标 workspace，保留现有采样、源账本和重放合同。
-- [ ] 将 Spine 持久化扩展适配到 `codex-history::RolloutItem` 和对应 wire codec；明确持久化类型与 app-server 公共类型的边界。
-- [ ] 保留旧 `spine_sampling_started`、`spine_transition` 记录的确定性读取和版本转换。
-- [ ] 将源记录和投影接口适配到 `ResponseItemEnvelope`，保存 `client_authored`、工具输出预算等宿主元数据，防止裸 `ResponseItem` 转换丢失信息。
-- [ ] 适配 `CompactedItem` 的审查历史、MCP 来源、窗口标识和 usage checkpoint。
-- [ ] 更新历史新增变体在分页、索引、统计、状态抽取和导出中的完整匹配；按实际含义处理新增记录。
-- [ ] 更新依赖和 Bazel 输入声明；新增编译期资源读取时同步维护 `compile_data` 等声明。
+- [x] 将独立 `spine-core` 接入目标 workspace，保留现有采样、源账本和重放合同。
+- [x] 将 Spine 持久化扩展适配到 `codex-history::RolloutItem` 和对应 wire codec；明确持久化类型与 app-server 公共类型的边界。
+- [x] 保留旧 `spine_sampling_started`、`spine_transition` 记录的确定性读取和版本转换。
+- [x] 将源记录和投影接口适配到 `ResponseItemEnvelope`，保存 `client_authored`、工具输出预算等宿主元数据，防止裸 `ResponseItem` 转换丢失信息。
+- [x] 适配 `CompactedItem` 的审查历史、MCP 来源、窗口标识和 usage checkpoint。
+- [x] 更新历史新增变体在分页、索引、统计、状态抽取和导出中的完整匹配；按实际含义处理新增记录。
+- [x] 更新依赖和 Bazel 输入声明；新增编译期资源读取时同步维护 `compile_data` 等声明。
 
 完成标准：新旧 Spine 记录可往返，元数据在持久化和恢复后保持一致；SDK 与受影响历史/存储测试通过。
 
@@ -84,14 +84,14 @@ P0 基线与差分清单
 
 主要范围：`config/`、`core/src/spine/config.rs`、`core/src/spine/session_config.rs`、`core/src/session/rollout_reconstruction.rs`、历史和线程存储。
 
-上游已通过 `279b93242c` 删除通用 config lock 支持；当前 Spine 使用 config-lock v2 保存 SDK 有效配置和来源。这是明确的适配点。
+上游已通过 `279b93242c` 删除通用 config lock 支持；旧 Spine 的 config-lock v2 保存宿主有效配置及 SDK 来源摘要，没有内嵌外部 SDK 文件内容。迁移后的 v3 记录完整 SDK 配置。这是明确的适配点。
 
-- [ ] 梳理旧 config lock 的实际入口、用户可见配置/参数和持久化读取方，列明兼容合同。
-- [ ] 将 Spine 必需的有效配置快照归属到其自有配置/归档模块，与目标 release 配置生命周期衔接。
-- [ ] 为已有 config-lock v1/v2 中合法且受支持的输入建立显式格式转换，避免恢复时重新读取变化后的默认配置。
-- [ ] 新数据使用确定的版本化格式；仅在数据确实损坏或语义不可恢复时报告具体记录和原因。
-- [ ] 恢复 cwd、权限 profile、环境、模型、推理设置、Spine 配置和分支归属，保持与目标 release 的字段及继承语义一致。
-- [ ] 验证完整分页 lineage、共享/压缩历史、fork 截断点和 rollback 边界；保留 Spine 已有有效历史恢复修复。
+- [x] 梳理旧 config lock 的实际入口、用户可见配置/参数和持久化读取方，列明兼容合同。
+- [x] 将 Spine 必需的有效配置快照归属到其自有配置/归档模块，与目标 release 配置生命周期衔接。
+- [x] 为已有 config-lock v1/v2 中合法且受支持的输入建立显式格式转换，避免恢复时重新读取变化后的默认配置。
+- [x] 新数据使用确定的版本化格式；仅在数据确实损坏或语义不可恢复时报告具体记录和原因。
+- [x] 恢复 cwd、权限 profile、环境、模型、推理设置、Spine 配置和分支归属，保持与目标 release 的字段及继承语义一致。
+- [x] 验证完整分页 lineage、共享/压缩历史、fork 截断点和 rollback 边界；保留 Spine 已有有效历史恢复修复。
 
 完成标准：同一旧会话恢复后，配置、活动分支和下一次模型输入可解释且一致；所有旧输入兼容项都有实现或明确的格式迁移。
 
@@ -99,15 +99,15 @@ P0 基线与差分清单
 
 主要范围：`core/src/spine/`、`core/src/session/turn.rs`、`step_context.rs`、`context_manager/`、`context/`、`tools/`、`compact*` 及 MCP 管理接口。
 
-- [ ] 将 Spine 采样事务绑定到目标 `StepContext` 的 settings、token budget、环境、MCP binding 和 tool router。
-- [ ] 适配 `Prompt.tools`、直接 Spine 工具和 code-mode 工具路径；模型看到的工具声明与实际执行使用同一份采样快照。
-- [ ] 明确顺序：开始采样并持久化边界 → 执行响应及工具 → 结算事实 → 持久化提交 → 安装投影。
-- [ ] 保留有副作用失败与中断的事实，确保恢复或网络重试不会重复执行、重复提交或重复投影。
-- [ ] 适配异步 hook 输出、MCP 结果处理和工具级 `output_token_limit`；相同结果在实时请求与恢复重放后保持一致。
-- [ ] 将模型投影与原始证据、审查历史分开维护，正确更新 history version、user-message revision 和 world-state baseline。
-- [ ] 把上游 token budget、history notes、`new_context` 和 remote compact 的窗口切换映射到 Spine epoch/compact barrier；由统一的窗口切换事务协调两者。
-- [ ] 保留上游实验开关、默认值和账号/provider 适用条件；验证符合条件且显式启用时与 Spine 的组合行为。
-- [ ] 维护稳定前缀、fork 缓存亲和性、模型片段上限和重放一致性；由增量检查决定客户端会话复用，避免不必要的 `reset_client_session`。
+- [x] 将 Spine 采样事务绑定到目标 `StepContext` 的 settings、token budget、环境、MCP binding 和 tool router。
+- [x] 适配 `Prompt.tools`、直接 Spine 工具和 code-mode 工具路径；模型看到的工具声明与实际执行使用同一份采样快照。
+- [x] 明确顺序：开始采样并持久化边界 → 执行响应及工具 → 结算事实 → 持久化提交 → 安装投影。
+- [x] 保留有副作用失败与中断的事实，确保恢复或网络重试不会重复执行、重复提交或重复投影。
+- [x] 适配异步 hook 输出、MCP 结果处理和工具级 `output_token_limit`；相同结果在实时请求与恢复重放后保持一致。
+- [x] 将模型投影与原始证据、审查历史分开维护，正确更新 history version、user-message revision 和 world-state baseline。
+- [x] 把上游 token budget、history notes、`new_context` 和 remote compact 的窗口切换映射到 Spine epoch/compact barrier；由统一的窗口切换事务协调两者。
+- [x] 保留上游实验开关、默认值和账号/provider 适用条件；验证符合条件且显式启用时与 Spine 的组合行为。
+- [x] 维护稳定前缀、fork 缓存亲和性、模型片段上限和重放一致性；由增量检查决定客户端会话复用，避免不必要的 `reset_client_session`。
 
 完成标准：实际出站请求证明采样与执行使用同一快照，事实提交与投影恰好一次，窗口切换与恢复一致，审查所需原始证据完整。
 
@@ -115,12 +115,12 @@ P0 基线与差分清单
 
 主要范围：`core/src/agent/control/`、`core/src/spine/spawn*`、`thread_manager.rs`、目标 `agent-roles/` 和 usage/goal 相关接口。
 
-- [ ] 适配新的角色加载和带 annotation 的 developer 指令继承。
-- [ ] 统一父子线程的环境、权限、模型和推理设置继承；不同模型的显式选择按目标接口处理。
-- [ ] 维护递归 Spawn 的容量准入、并发计数、分支归属和有序结算。
-- [ ] 对接上游累计 usage 与根 goal budget，明确父线程、子线程和恢复后的计数归属，避免漏计或重复累计。
-- [ ] 验证失败恢复、继续、重试、取消、关闭、父线程退出和恢复期间的状态转换；修复状态转换根因，避免笼统阻断整个会话。
-- [ ] 验证已结束子线程不会在恢复后重现为活动线程，未完成分支不会在 rollback 或切换中丢失。
+- [x] 适配新的角色加载和带 annotation 的 developer 指令继承。
+- [x] 统一父子线程的环境、权限、模型和推理设置继承；不同模型的显式选择按目标接口处理。
+- [x] 维护递归 Spawn 的容量准入、并发计数、分支归属和有序结算。
+- [x] 对接上游累计 usage 与根 goal budget，明确父线程、子线程和恢复后的计数归属，避免漏计或重复累计。
+- [x] 验证失败恢复、继续、重试、取消、关闭、父线程退出和恢复期间的状态转换；修复状态转换根因，避免笼统阻断整个会话。
+- [x] 验证已结束子线程不会在恢复后重现为活动线程，未完成分支不会在 rollback 或切换中丢失。
 
 完成标准：递归分支、并发限制、权限和预算在实时执行及恢复后满足相同合同。
 
@@ -128,13 +128,13 @@ P0 基线与差分清单
 
 主要范围：`app-server-protocol/`、`app-server/`、`tui/`、`exec/` 和 Spine feedback。
 
-- [ ] 适配目标 v2 请求/响应/通知，保留 SpineTree、SpawnProgress、反馈和线程扩展字段。
-- [ ] 对齐线程 model/reasoningEffort、异步问题、分页历史、断线重连与恢复后的事件顺序。
-- [ ] 在新事件路由下处理 Spine 原先删除的 `agent_status_feed` 职责，避免重复显示或遗漏子线程活动。
-- [ ] 对齐目标 release 的成功命令逐条显示、完整 patch 和终端交互历史。
-- [ ] 验证 Spine 树、状态栏、子线程选择器、失败恢复界面、线程切换、rollback 和重连。
-- [ ] 所有 UI 变化增加或更新 insta 快照，审阅 `.snap.new` 后接受预期变化。
-- [ ] 更新 app-server README 的实际 API 行为及示例；重生成稳定与实验 schema、TypeScript 和 precomputed 导出。
+- [x] 适配目标 v2 请求/响应/通知，保留 SpineTree、SpawnProgress、反馈和线程扩展字段。
+- [x] 对齐线程 model/reasoningEffort、异步问题、分页历史、断线重连与恢复后的事件顺序。
+- [x] 在新事件路由下处理 Spine 原先删除的 `agent_status_feed` 职责，避免重复显示或遗漏子线程活动。
+- [x] 对齐目标 release 的成功命令逐条显示、完整 patch 和终端交互历史。
+- [x] 验证 Spine 树、状态栏、子线程选择器、失败恢复界面、线程切换、rollback 和重连。
+- [x] 所有 UI 变化增加或更新 insta 快照，审阅 `.snap.new` 后接受预期变化。
+- [x] 更新 app-server README 的实际 API 行为及示例；重生成稳定与实验 schema、TypeScript 和 precomputed 导出。
 
 完成标准：公开 JSON-RPC API 和 TUI 快照覆盖新行为；实时显示、恢复重放与线程切换一致，通用命令呈现与目标 release 一致。
 
