@@ -1,0 +1,16 @@
+name: spine-migration-ci
+
+on:
+  push:
+    branches:
+      - "spine/upgrade-*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-packages:
+    uses: ./.github/workflows/spine-release.yml
+    with:
+      version: "0.4.0"

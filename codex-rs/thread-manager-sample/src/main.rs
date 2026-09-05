@@ -27,6 +27,10 @@ use codex_core_api::EventMsg;
 use codex_core_api::ExecServerRuntimePaths;
 use codex_core_api::ExtensionRegistryBuilder;
 use codex_core_api::Features;
+use codex_core_api::Feature;
+use codex_core_api::SpineFeature;
+use codex_core_api::SpineConfig;
+use codex_core_api::SpineToolCatalog;
 use codex_core_api::GhostSnapshotConfig;
 use codex_core_api::History;
 use codex_core_api::MemoriesConfig;
@@ -184,6 +188,14 @@ fn new_config(model: Option<String>, arg0_paths: Arg0DispatchPaths) -> anyhow::R
         .context("OpenAI model provider should be available")?
         .clone();
 
+    let features = Features::with_defaults();
+    let spine_config = SpineConfig::default().with_features(
+        [(Feature::SpineJit, SpineFeature::Jit), (Feature::SpineSpawn, SpineFeature::Spawn)]
+            .into_iter()
+            .filter(|(feature, _)| features.enabled(*feature))
+            .map(|(_, feature)| feature),
+    )?;
+    let spine_tools = SpineToolCatalog::new(&spine_config)?;
     let mut config = Config {
         config_layer_stack: ConfigLayerStack::default(),
         startup_warnings: Vec::new(),
@@ -301,6 +313,13 @@ fn new_config(model: Option<String>, arg0_paths: Arg0DispatchPaths) -> anyhow::R
         background_terminal_max_timeout: 300_000,
         ghost_snapshot: GhostSnapshotConfig::default(),
         multi_agent_v2: MultiAgentV2Config::default(),
+        spine_spawn: Default::default(),
+        spine_config,
+        spine_tools,
+        config_lock_export_dir: None,
+        config_lock_allow_codex_version_mismatch: false,
+        config_lock_save_fields_resolved_from_model_catalog: true,
+        config_lock_toml: None,
         max_goal_token_budget: None,
         token_budget: None,
         rollout_budget: None,
@@ -319,7 +338,7 @@ fn new_config(model: Option<String>, arg0_paths: Arg0DispatchPaths) -> anyhow::R
     };
     config
         .features
-        .set(Features::with_defaults())
+        .set(features)
         .context("configure default features")?;
     Ok(config)
 }
