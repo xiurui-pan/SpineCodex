@@ -1,3 +1,7 @@
+use codex_config::spine_snapshot::ConfigLockfileToml;
+use crate::spine::config_snapshot::config_without_lock_controls;
+use crate::spine::config_snapshot::lock_layer_from_config;
+use crate::spine::config_snapshot::read_config_lock_from_path;
 use crate::config::edit::ConfigEdit;
 use crate::config::edit::ConfigEditsBuilder;
 use crate::context::world_state::validate_managed_developer_instructions;
@@ -135,6 +139,8 @@ use rmcp::model::FormElicitationCapability;
 use rmcp::model::UrlElicitationCapability;
 use serde::Deserialize;
 use serde::Serialize;
+use spine_core::host::SpineConfig;
+use spine_core::host::ToolCatalog;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -605,6 +611,19 @@ pub enum ThreadStoreConfig {
 /// Application configuration loaded from disk and merged with overrides.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Config {
+    /// Directory where Codex writes effective session config lock files.
+    pub config_lock_export_dir: Option<AbsolutePathBuf>,
+
+    /// Whether config lock replay ignores Codex version drift between the
+    /// lock metadata and the regenerated lock.
+    pub config_lock_allow_codex_version_mismatch: bool,
+
+    /// Whether config lock creation saves values resolved from the model
+    /// catalog/session configuration.
+    pub config_lock_save_fields_resolved_from_model_catalog: bool,
+
+    /// Effective config lock used for strict replay validation.
+    pub config_lock_toml: Option<Arc<ConfigLockfileToml>>,
     /// Provenance for how this [`Config`] was derived (merged layers + enforced
     /// requirements).
     pub config_layer_stack: ConfigLayerStack,
@@ -1044,6 +1063,9 @@ pub struct Config {
     /// Settings specific to the task-path-based multi-agent tool surface.
     pub multi_agent_v2: MultiAgentV2Config,
 
+    /// Session-scoped capacity for children created through `spine.spawn`.
+    pub spine_spawn: SpineSpawnConfig,
+
     /// Context-window token budget configuration, when enabled.
     pub token_budget: Option<TokenBudgetConfig>,
     /// Shared token budget for the root thread and its sub-agents.
@@ -1055,6 +1077,12 @@ pub struct Config {
 
     /// Centralized feature flags; source of truth for feature gating.
     pub features: ManagedFeatures,
+
+    /// Validated host-neutral Spine SDK configuration.
+    pub spine_config: SpineConfig,
+
+    /// Model-visible Spine tools derived from the SDK configuration.
+    pub spine_tools: ToolCatalog,
 
     /// When `true`, suppress warnings about unstable (under development) features.
     pub suppress_unstable_features_warning: bool,
@@ -1309,6 +1337,20 @@ impl Default for MultiAgentV2Config {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct SpineSpawnConfig {
+    pub max_concurrent_threads_per_session: usize,
+}
+
+impl Default for SpineSpawnConfig {
+    fn default() -> Self {
+        Self {
+            max_concurrent_threads_per_session:
+                DEFAULT_MULTI_AGENT_V2_MAX_CONCURRENT_THREADS_PER_SESSION,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum TerminalResizeReflowMaxRows {
     /// Use the runtime terminal detector to choose a scrollback-sized cap.
@@ -1483,6 +1525,39 @@ impl ConfigBuilder {
                 return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, err));
             }
         };
+        let config_lock_settings = config_toml.spine_snapshot_settings();
+        if let Some(config_lock_load_path) =
+            config_lock_settings.and_then(|config_lock| config_lock.load_path.as_ref())
+        {
+            let allow_codex_version_mismatch = config_lock_settings
+                .and_then(|config_lock| config_lock.allow_codex_version_mismatch)
+                .unwrap_or(false);
+            let save_fields_resolved_from_model_catalog = config_lock_settings
+                .and_then(|config_lock| config_lock.save_fields_resolved_from_model_catalog)
+                .unwrap_or(true);
+            let lockfile_toml = read_config_lock_from_path(config_lock_load_path).await?;
+            let expected_lock_config = lockfile_toml.clone();
+            let lock_layer = lock_layer_from_config(config_lock_load_path, &lockfile_toml)?;
+            let lock_config_toml = config_without_lock_controls(&lockfile_toml.config);
+            let lock_config_layer_stack = ConfigLayerStack::new(
+                vec![lock_layer],
+                config_layer_stack.requirements().clone(),
+                config_layer_stack.requirements_toml().clone(),
+            )?;
+            let mut config = Config::load_config_with_layer_stack(
+                LOCAL_FS.as_ref(),
+                lock_config_toml,
+                harness_overrides,
+                codex_home,
+                lock_config_layer_stack,
+            )
+            .await?;
+            config.config_lock_toml = Some(Arc::new(expected_lock_config));
+            config.config_lock_allow_codex_version_mismatch = allow_codex_version_mismatch;
+            config.config_lock_save_fields_resolved_from_model_catalog =
+                save_fields_resolved_from_model_catalog;
+            return Ok(config);
+        }
         Config::load_config_with_layer_stack(
             LOCAL_FS.as_ref(),
             config_toml,
@@ -2763,6 +2838,16 @@ fn resolve_multi_agent_v2_config(config_toml: &ConfigToml) -> MultiAgentV2Config
     }
 }
 
+fn resolve_spine_spawn_config(config_toml: &ConfigToml) -> SpineSpawnConfig {
+    SpineSpawnConfig {
+        max_concurrent_threads_per_session: config_toml
+            .spine_spawn
+            .as_ref()
+            .and_then(|config| config.max_concurrent_threads_per_session)
+            .unwrap_or(DEFAULT_MULTI_AGENT_V2_MAX_CONCURRENT_THREADS_PER_SESSION),
+    }
+}
+
 pub(crate) fn resolve_token_budget_config(
     config_toml: &ConfigToml,
     features: &ManagedFeatures,
@@ -3148,6 +3233,7 @@ impl Config {
         codex_home: AbsolutePathBuf,
         config_layer_stack: ConfigLayerStack,
     ) -> std::io::Result<Self> {
+        let spine_snapshot_settings = cfg.spine_snapshot_settings().cloned();
         // Keep the large config-construction future off small test thread stacks.
         Box::pin(async move {
         if cfg.experimental_thread_store_endpoint.is_some() {
@@ -3371,6 +3457,15 @@ impl Config {
                 repo_root.as_ref().map(AbsolutePathBuf::as_path),
             )
             .unwrap_or(ProjectConfig { trust_level: None });
+        let home_directory = dirs::home_dir();
+        let (spine_config, spine_tools) = crate::spine::config::load(
+            cfg.spine_config_file.as_ref(),
+            cfg.spine_config_snapshot.as_ref(),
+            resolved_cwd.as_path(),
+            home_directory.as_deref(),
+            &features,
+            active_project.is_trusted(),
+        )?;
         let permission_config_syntax = resolve_permission_config_syntax(
             &config_layer_stack,
             &cfg,
@@ -3693,6 +3788,7 @@ impl Config {
         };
         let code_mode = resolve_code_mode_config(&cfg);
         let multi_agent_v2 = resolve_multi_agent_v2_config(&cfg);
+        let spine_spawn = resolve_spine_spawn_config(&cfg);
         let token_budget = resolve_token_budget_config(&cfg, &features)?;
         let rollout_budget = resolve_rollout_budget_config(&cfg, &features)?;
         let current_time_reminder = resolve_current_time_reminder_config(&cfg, &features)?;
@@ -3743,6 +3839,12 @@ impl Config {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
                 "features.multi_agent_v2.max_concurrent_threads_per_session must be at least 1",
+            ));
+        }
+        if spine_spawn.max_concurrent_threads_per_session == 0 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "spine_spawn.max_concurrent_threads_per_session must be at least 1",
             ));
         }
         validate_multi_agent_v2_wait_timeout(
@@ -4300,11 +4402,23 @@ impl Config {
             background_terminal_max_timeout,
             ghost_snapshot,
             multi_agent_v2,
+            spine_spawn,
             token_budget,
             rollout_budget,
             current_time_reminder,
             sleep_tool_mode,
             features,
+            spine_config,
+            spine_tools,
+            config_lock_export_dir: spine_snapshot_settings.as_ref()
+                .and_then(|config_lock| config_lock.export_dir.clone()),
+            config_lock_allow_codex_version_mismatch: spine_snapshot_settings.as_ref()
+                .and_then(|config_lock| config_lock.allow_codex_version_mismatch)
+                .unwrap_or(false),
+            config_lock_save_fields_resolved_from_model_catalog: spine_snapshot_settings.as_ref()
+                .and_then(|config_lock| config_lock.save_fields_resolved_from_model_catalog)
+                .unwrap_or(true),
+            config_lock_toml: None,
             suppress_unstable_features_warning: cfg
                 .suppress_unstable_features_warning
                 .unwrap_or(false),

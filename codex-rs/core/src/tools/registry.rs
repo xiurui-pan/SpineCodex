@@ -48,11 +48,23 @@ pub(crate) type ToolTelemetryTags = Vec<(&'static str, String)>;
 pub use codex_tools::ToolExecutor;
 pub use codex_tools::ToolExposure;
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum ModelVisibleToolOwner {
+    #[default]
+    Base,
+    Spine,
+}
+
 /// Typed runtime contract for locally executed tools.
 ///
 /// Implementers provide the shared `ToolExecutor` behavior plus optional
 /// core-owned metadata for hooks, telemetry, tool search, and argument diffs.
 pub(crate) trait CoreToolRuntime: ToolExecutor<ToolInvocation> {
+    /// Lets transactional tools finish cancellation and settle their child executions.
+    fn waits_for_runtime_cancellation(&self) -> bool {
+        false
+    }
+
     /// Whether this built-in control tool needs a structured tool-call event.
     fn is_builtin_control_tool(&self) -> bool {
         false
@@ -66,6 +78,14 @@ pub(crate) trait CoreToolRuntime: ToolExecutor<ToolInvocation> {
     /// Returns lazily cached Code Mode definitions owned by this runtime.
     fn cached_code_mode_definitions(&self) -> Option<&[codex_code_mode::ToolDefinition]> {
         None
+    }
+
+    /// Identifies the host component that owns this runtime's model-visible spec.
+    ///
+    /// Planning uses this provenance before namespace coalescing; provider-visible
+    /// namespace text is not an ownership identity.
+    fn model_visible_owner(&self) -> ModelVisibleToolOwner {
+        ModelVisibleToolOwner::Base
     }
 
     /// Returns a readiness wait for this exact tool before taking the execution gate.

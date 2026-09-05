@@ -937,10 +937,11 @@ impl ModelClient {
         let is_openai = self.state.provider.info().is_openai();
         let (instructions, tools) = if model_info.use_responses_lite {
             // These prompt-only items are rebuilt on every request. Hash their visible payloads
-            // within the thread so retries and resumed sessions preserve their identity.
+            // within the shared cache namespace so retries, resumed sessions, and inherited fork
+            // prefixes preserve their identity.
             let prefix_namespace = Uuid::new_v5(
                 &Uuid::NAMESPACE_OID,
-                self.state.thread_id.to_string().as_bytes(),
+                self.prompt_cache_key(responses_metadata).as_bytes(),
             );
             let tools = if self.state.provider.capabilities().namespace_tools {
                 create_tools_json_for_responses_lite(&prompt.tools)?
@@ -955,6 +956,19 @@ impl ModelClient {
                 role: "developer".to_string(),
                 tools,
             }];
+            if let Some(spine_tool) = &prompt.spine_tool {
+                let tools = if self.state.provider.capabilities().namespace_tools {
+                    create_tools_json_for_responses_lite(std::slice::from_ref(spine_tool))?
+                } else {
+                    create_tools_json_for_responses_api(std::slice::from_ref(spine_tool))?
+                };
+                let item = ResponseItem::AdditionalTools {
+                    id: None,
+                    role: "developer".to_string(),
+                    tools,
+                };
+                prefix.push(item);
+            }
             if !prompt.base_instructions.text.is_empty() {
                 let mut instructions = ContextualUserFragment::into(BaseInstructionsFragment(
                     prompt.base_instructions.text.clone(),
@@ -968,9 +982,10 @@ impl ModelClient {
             input.splice(0..0, prefix);
             (String::new(), None)
         } else {
+            let model_visible_specs = prompt.model_visible_specs();
             (
                 prompt.base_instructions.text.clone(),
-                Some(create_tools_raw_json_for_responses_api(&prompt.tools)?.into()),
+                Some(create_tools_raw_json_for_responses_api(&model_visible_specs)?.into()),
             )
         };
         if !is_openai {
@@ -2041,7 +2056,7 @@ impl ModelClientSession {
                             /*warmup*/ false,
                             request_trace,
                             inference_trace,
-                        )
+                                    )
                         .await?
                     {
                         WebsocketStreamOutcome::Stream(stream) => return Ok(stream),
@@ -2060,7 +2075,7 @@ impl ModelClientSession {
                     service_tier,
                     responses_metadata,
                     inference_trace,
-                )
+                    )
                 .await
             }
         }

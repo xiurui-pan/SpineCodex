@@ -149,10 +149,28 @@ pub struct OrchestratorFeatureToml {
     pub enabled: Option<bool>,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq, Eq, JsonSchema)]
+#[schemars(deny_unknown_fields)]
+pub struct SpineSpawnConfigToml {
+    /// Maximum concurrent threads in one Spine Spawn session, including the root.
+    #[schemars(range(min = 1))]
+    pub max_concurrent_threads_per_session: Option<usize>,
+}
+
 /// Base config deserialized from ~/.codex/config.toml.
 #[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq, JsonSchema)]
 #[schemars(deny_unknown_fields)]
 pub struct ConfigToml {
+    /// Spine configuration snapshot import/export controls.
+    pub spine_snapshot: Option<crate::spine_snapshot::DebugConfigLockToml>,
+    /// Compatibility controls for sessions exported before SpineCodex 0.4.
+    pub debug: Option<crate::spine_snapshot::DebugToml>,
+    /// Settings for children created through `spine.spawn`.
+    pub spine_spawn: Option<SpineSpawnConfigToml>,
+    /// Explicit Spine SDK configuration layer.
+    pub spine_config_file: Option<AbsolutePathBuf>,
+    /// Resolved Spine configuration embedded in a versioned session snapshot.
+    pub spine_config_snapshot: Option<crate::spine_snapshot::SpineConfigLockToml>,
     /// Optional override of model selection.
     pub model: Option<String>,
     /// Review model override used by the `/review` feature.
