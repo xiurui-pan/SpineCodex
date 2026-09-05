@@ -56,6 +56,10 @@ pub(crate) enum InsertHistoryMode {
     FullScreen,
 }
 
+#[cfg(test)]
+#[path = "insert_history_spine_tests.rs"]
+mod spine_tests;
+
 /// Insert `lines` above the viewport using the terminal's backend writer
 /// (avoids direct stdout references).
 pub fn insert_history_lines<B>(
@@ -113,6 +117,9 @@ pub(crate) fn insert_history_hyperlink_lines_with_mode_and_wrap_policy<B>(
 where
     B: Backend<Error = io::Error> + Write,
 {
+    if lines.is_empty() {
+        return Ok(());
+    }
     let mut area = terminal.viewport_area;
     let mut should_update_area = false;
     let last_cursor_pos = terminal.last_known_cursor_pos;
@@ -130,7 +137,15 @@ where
     //   equivalent to standard wrapping when no URL is present.
     let wrap_width = area.width.max(1) as usize;
     let (wrapped, wrapped_rows) = wrap_history_hyperlink_lines(lines, wrap_width, wrap_policy);
-    let wrapped_lines = wrapped_rows as u16;
+    let wrapped_lines = u16::try_from(wrapped_rows).unwrap_or(u16::MAX);
+    let viewport_shift = wrapped_lines.min(screen_size.height.saturating_sub(area.bottom()));
+    // A confined history scroll region requires two rows. Use the release's full-screen
+    // insertion for this topology, including when the composer occupies the entire terminal.
+    let mode = match mode {
+        InsertHistoryMode::Standard if area.top().saturating_add(viewport_shift) < 2 => InsertHistoryMode::FullScreen,
+        InsertHistoryMode::Standard => InsertHistoryMode::Standard,
+        InsertHistoryMode::FullScreen => InsertHistoryMode::FullScreen,
+    };
     match mode {
         InsertHistoryMode::FullScreen => {
             // The existing viewport is immediately replaced in the same draw pass. Clear it

@@ -16,6 +16,7 @@ fn paste_hidden_plan_shell_payload(chat: &mut ChatWidget) -> String {
 fn plan_test_session(thread_id: ThreadId) -> crate::session_state::ThreadSessionState {
     crate::session_state::ThreadSessionState {
         thread_id,
+        spine_feedback_enabled: Some(false),
         forked_from_id: None,
         fork_parent_title: None,
         thread_name: None,
@@ -1267,6 +1268,7 @@ async fn submit_user_message_emits_structured_plugin_mentions_from_bindings() {
         collaboration_mode: None,
         personality: None,
         message_history: None,
+        spine_feedback_enabled: Some(false),
         network_proxy: None,
         rollout_path: Some(rollout_file.path().to_path_buf()),
     };
