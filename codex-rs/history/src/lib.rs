@@ -238,6 +238,10 @@ pub struct RolloutLine {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ResumedHistory {
+    /// Complete canonical lineage when `history` is a bounded native context view.
+    /// Omission means the native view already contains the complete lineage.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spine_history: Option<Arc<Vec<RolloutItem>>>,
     pub conversation_id: ThreadId,
     pub history: Arc<Vec<RolloutItem>>,
     pub rollout_path: Option<PathBuf>,
@@ -252,6 +256,14 @@ pub enum InitialHistory {
 }
 
 impl InitialHistory {
+    /// Complete source evidence for Spine replay, independent of native hydration metadata.
+    pub fn get_spine_rollout_items(&self) -> &[RolloutItem] {
+        match self {
+            Self::Resumed(ResumedHistory { spine_history: Some(history), .. }) => history,
+            Self::New | Self::Cleared | Self::Resumed(_) | Self::Forked(_) => self.get_rollout_items(),
+        }
+    }
+
     pub fn scan_rollout_items(&self, mut predicate: impl FnMut(&RolloutItem) -> bool) -> bool {
         match self {
             Self::New | Self::Cleared => false,

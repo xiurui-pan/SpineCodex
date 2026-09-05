@@ -59,7 +59,9 @@ fn compaction_beside_spine_records_preserves_harness_metadata_and_review_history
     };
     let items = vec![
         RolloutItem::SpineSamplingStarted(crate::SpineSamplingStartedItem {
-            version: 1,
+            sdk_config: None,
+        replay_seed: None,
+                    version: 1,
             payload: json!({"schema": "spine.sampling.started"}),
         }),
         RolloutItem::Compacted(checkpoint.clone()),

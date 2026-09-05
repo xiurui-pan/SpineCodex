@@ -8,6 +8,12 @@ use serde_json::Value;
 pub struct SpineSamplingStartedItem {
     pub version: u32,
     pub payload: Value,
+    /// Resolved SDK configuration used by this sampling transaction, never sent as history text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sdk_config: Option<String>,
+    /// Exact host initialization before the first canonical sampling, including native context edits.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub replay_seed: Option<Value>,
 }
 
 /// A committed sampling transaction, decoded by the Spine archive owner.

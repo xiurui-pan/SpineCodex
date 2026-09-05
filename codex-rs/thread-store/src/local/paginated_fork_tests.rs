@@ -233,7 +233,9 @@ fn event_item() -> RolloutItem {
 
 fn sampling_started(label: &str) -> RolloutItem {
     RolloutItem::SpineSamplingStarted(SpineSamplingStartedItem {
-        version: 1,
+        sdk_config: None,
+        replay_seed: None,
+                    version: 1,
         payload: json!({ "label": label }),
     })
 }
