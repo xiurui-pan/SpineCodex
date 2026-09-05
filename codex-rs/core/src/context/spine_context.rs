@@ -1,4 +1,7 @@
 use codex_protocol::models::ContentItemKind;
+use codex_context_fragments::AnnotatedContent;
+use codex_context_fragments::to_annotated_content;
+use codex_context_fragments::set_annotated_content;
 use super::ContextualUserFragment;
 use codex_protocol::models::ContentItem;
 use codex_protocol::models::ResponseItem;
@@ -193,7 +196,9 @@ impl SpineUserAnchor {
         {
             text.insert_str(0, &prefix);
         } else {
-            content.insert(0, ContentItem::InputText { text: prefix });
+            let mut content = to_annotated_content(item).expect("user message has content");
+            content.insert(0, AnnotatedContent::input_text(prefix, self.content_kind()));
+            set_annotated_content(item, content);
         }
     }
 }
