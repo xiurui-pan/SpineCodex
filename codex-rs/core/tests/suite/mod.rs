@@ -162,6 +162,7 @@ mod spawn_agent_description;
 mod spine_effectful_retry;
 mod spine_remote_compact;
 mod spine_responses_lite;
+mod spine_migration;
 mod spine_spawn;
 mod sqlite_state;
 mod step_settings;
