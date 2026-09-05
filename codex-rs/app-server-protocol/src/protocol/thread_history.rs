@@ -400,6 +400,8 @@ impl ThreadHistoryBuilder {
             | RolloutItem::WorldState(_)
             | RolloutItem::RealtimeItem(_)
             | RolloutItem::SecurityRiskScore(_)
+            | RolloutItem::SpineSamplingStarted(_)
+            | RolloutItem::SpineTransition(_)
             | RolloutItem::SessionMeta(_) => {}
         }
     }

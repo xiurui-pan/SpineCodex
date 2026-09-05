@@ -114,6 +114,10 @@ pub enum RolloutItem {
     EventMsg(EventMsg),
     /// Sparse, model-invisible facts used to reconstruct realtime presentation.
     RealtimeItem(RealtimeItem),
+    /// Durable pre-sampling boundary for canonical Spine replay.
+    SpineSamplingStarted(SpineSamplingStartedItem),
+    /// One successfully committed Spine sampling transition.
+    SpineTransition(SpineTransitionItem),
 }
 
 impl Serialize for RolloutItem {
@@ -150,8 +154,11 @@ impl JsonSchema for RolloutItem {
 
 mod guardian_history;
 mod rollout_payload;
+mod spine;
 
 pub use guardian_history::GuardianHistoryCheckpoint;
+pub use spine::SpineSamplingStartedItem;
+pub use spine::SpineTransitionItem;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct CompactedItem {
@@ -440,6 +447,8 @@ fn multi_agent_version_from_items(
             | RolloutItem::WorldState(_)
             | RolloutItem::SecurityRiskScore(_)
             | RolloutItem::RealtimeItem(_)
+            | RolloutItem::SpineSamplingStarted(_)
+            | RolloutItem::SpineTransition(_)
             | RolloutItem::EventMsg(_) => None,
         })
     })
