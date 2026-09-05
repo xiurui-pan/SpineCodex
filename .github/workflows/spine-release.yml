@@ -102,6 +102,10 @@ jobs:
 
       - uses: ./.github/actions/setup-ci
 
+      - name: Validate Unix Desktop launcher
+        shell: bash
+        run: bash -n "${GITHUB_WORKSPACE}/scripts/codex-desktop/start-spinecodex-desktop.command"
+
       - name: Verify native runner architecture
         shell: bash
         run: |
@@ -308,6 +312,18 @@ jobs:
           persist-credentials: false
 
       - uses: ./.github/actions/setup-ci
+
+      - name: Validate Windows Desktop launcher
+        shell: powershell
+        run: |
+          $tokens = $null
+          $parseErrors = $null
+          $launcher = Join-Path $env:GITHUB_WORKSPACE "scripts/codex-desktop/start-spinecodex-desktop.ps1"
+          [System.Management.Automation.Language.Parser]::ParseFile($launcher, [ref]$tokens, [ref]$parseErrors) | Out-Null
+          if ($parseErrors.Count -gt 0) {
+            $parseErrors | Format-List | Out-String | Write-Error
+            exit 1
+          }
 
       - name: Verify native runner architecture
         shell: powershell
