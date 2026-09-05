@@ -18,7 +18,8 @@ impl SpineSessionConfig {
             features.push(spine_core::host::Feature::Spawn);
         }
         let sdk = config
-            .spine_config
+            .spine
+            .sdk()
             .clone()
             .with_features(features)
             .expect("validated session Spine features must remain valid");

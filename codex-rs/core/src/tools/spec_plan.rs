@@ -1172,7 +1172,8 @@ fn add_core_utility_tools(context: &CoreToolPlanContext<'_>, registry: &mut Tool
 
     let spine_tools = turn_context
         .config
-        .spine_tools
+        .spine
+        .tools()
         .clone()
         .with_spawn_max_items(
             turn_context

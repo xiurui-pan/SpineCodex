@@ -614,7 +614,7 @@ impl Session {
 
         let mut config = config;
         crate::spine::config::restore_sampling_config(&mut config, &conversation_history)
-            .map_err(|error| CodexErr::Fatal(format!("invalid saved Spine configuration: {error}")))?;
+            .map_err(|error| CodexErr::Fatal(format!("failed to initialize Spine configuration: {error}")))?;
         let mut config = Arc::new(config);
         let refresh_strategy = if session_source.is_non_root_agent() {
             codex_models_manager::manager::RefreshStrategy::Offline
@@ -1363,7 +1363,7 @@ impl Session {
         } else {
             instructions
         };
-        instructions.text = config.spine_config.extend_system_prompt(&instructions.text);
+        instructions.text = config.spine.sdk().extend_system_prompt(&instructions.text);
         instructions
     }
 

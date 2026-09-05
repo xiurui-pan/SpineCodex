@@ -56,6 +56,9 @@
             .features
             .enable(Feature::CurrentTimeReminder)
             .expect("current_time_reminder should be enableable in tests");
+        let mut config = config;
+        crate::spine::config::restore_sampling_config(&mut config, &codex_history::InitialHistory::New)
+            .expect("resolve SDK before constructing session snapshot");
         sc.original_config_do_not_use = Arc::new(config);
         sc.base_instructions = "resolved instructions".to_string();
         sc.developer_instructions = Some("resolved developer instructions".to_string());
@@ -176,6 +179,9 @@
             .features
             .enable(Feature::TokenBudget)
             .expect("token_budget should be enableable in tests");
+        let mut config = config;
+        crate::spine::config::restore_sampling_config(&mut config, &codex_history::InitialHistory::New)
+            .expect("resolve SDK before constructing session snapshot");
         sc.original_config_do_not_use = Arc::new(config);
 
         let lockfile = sc.to_config_lockfile_toml().expect("lock should serialize");
@@ -197,6 +203,9 @@
         let mut sc = crate::session::tests::make_session_configuration_for_tests().await;
         let mut config = (*sc.original_config_do_not_use).clone();
         config.config_lock_save_fields_resolved_from_model_catalog = false;
+        let mut config = config;
+        crate::spine::config::restore_sampling_config(&mut config, &codex_history::InitialHistory::New)
+            .expect("resolve SDK before constructing session snapshot");
         sc.original_config_do_not_use = Arc::new(config);
         sc.base_instructions = "catalog instructions".to_string();
         sc.developer_instructions = Some("catalog developer instructions".to_string());
@@ -254,6 +263,9 @@ sandbox_private_desktop = false
             .expect("config should load");
         config.config_lock_save_fields_resolved_from_model_catalog = false;
         let mut sc = crate::session::tests::make_session_configuration_for_tests().await;
+        let mut config = config;
+        crate::spine::config::restore_sampling_config(&mut config, &codex_history::InitialHistory::New)
+            .expect("resolve SDK before constructing session snapshot");
         sc.original_config_do_not_use = Arc::new(config);
 
         let lockfile = sc.to_config_lockfile_toml().expect("lock should serialize");
@@ -295,6 +307,9 @@ sandbox_private_desktop = false
             .await
             .expect("config should load");
         let mut sc = crate::session::tests::make_session_configuration_for_tests().await;
+        let mut config = config;
+        crate::spine::config::restore_sampling_config(&mut config, &codex_history::InitialHistory::New)
+            .expect("resolve SDK before constructing session snapshot");
         sc.original_config_do_not_use = Arc::new(config);
 
         let lockfile = sc.to_config_lockfile_toml().expect("lock should serialize");
@@ -313,12 +328,10 @@ sandbox_private_desktop = false
             .transpose()?;
         let mut config: ConfigToml = toml::from_str("").expect("empty parsed config");
         config.spine_config_file = explicit_path.clone();
-        let spine_config = crate::spine::config::lock_snapshot(
-            explicit_path.as_ref(),
-            working_directory,
-            home_directory,
-            project_config_trusted,
-        )?;
+        let resolved = crate::config::SpineConfiguration::pending(
+            explicit_path.as_ref(), None, working_directory, home_directory, project_config_trusted,
+        ).resolve(None, &crate::config::ManagedFeatures::default()).map_err(std::io::Error::other)?;
+        let spine_config = resolved.snapshot().clone();
         Ok(crate::spine::config_snapshot::config_lockfile(config, spine_config))
     }
 
@@ -425,6 +438,9 @@ sandbox_private_desktop = false
             .build()
             .await?;
         let mut sc = crate::session::tests::make_session_configuration_for_tests().await;
+        let mut config = config;
+        crate::spine::config::restore_sampling_config(&mut config, &codex_history::InitialHistory::New)
+            .expect("resolve SDK before constructing session snapshot");
         sc.original_config_do_not_use = Arc::new(config);
 
         let lock = sc.to_config_lockfile_toml().expect("lock should serialize");
@@ -458,10 +474,7 @@ async fn legacy_snapshots_convert_to_self_contained_version_three() -> anyhow::R
             legacy.spine_config.as_mut().expect("source ledger").effective_config = None;
         }
         let migrated = write_and_read_lock(&path, &legacy).await?;
-        let expected = crate::spine::config_snapshot::config_lockfile(
-            legacy.config.clone(),
-            crate::spine::config::lock_snapshot(None, temp.path(), None, false)?,
-        );
+        let expected = config_lock_for_sdk_layers(temp.path(), None, None, false)?;
         assert_eq!(migrated.config, expected.config);
         assert_eq!(migrated.version, expected.version);
         assert_eq!(migrated.spine_config, expected.spine_config);

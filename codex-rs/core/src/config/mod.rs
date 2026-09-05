@@ -139,8 +139,7 @@ use rmcp::model::FormElicitationCapability;
 use rmcp::model::UrlElicitationCapability;
 use serde::Deserialize;
 use serde::Serialize;
-use spine_core::host::SpineConfig;
-use spine_core::host::ToolCatalog;
+pub use crate::spine::config::SpineConfiguration;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -1078,11 +1077,8 @@ pub struct Config {
     /// Centralized feature flags; source of truth for feature gating.
     pub features: ManagedFeatures,
 
-    /// Validated host-neutral Spine SDK configuration.
-    pub spine_config: SpineConfig,
-
-    /// Model-visible Spine tools derived from the SDK configuration.
-    pub spine_tools: ToolCatalog,
+    /// SDK sources are resolved with persisted history when the session initializes.
+    pub spine: SpineConfiguration,
 
     /// When `true`, suppress warnings about unstable (under development) features.
     pub suppress_unstable_features_warning: bool,
@@ -3458,14 +3454,13 @@ impl Config {
             )
             .unwrap_or(ProjectConfig { trust_level: None });
         let home_directory = dirs::home_dir();
-        let (spine_config, spine_tools) = crate::spine::config::load(
+        let spine = SpineConfiguration::pending(
             cfg.spine_config_file.as_ref(),
             cfg.spine_config_snapshot.as_ref(),
             resolved_cwd.as_path(),
             home_directory.as_deref(),
-            &features,
             active_project.is_trusted(),
-        )?;
+        );
         let permission_config_syntax = resolve_permission_config_syntax(
             &config_layer_stack,
             &cfg,
@@ -4408,8 +4403,7 @@ impl Config {
             current_time_reminder,
             sleep_tool_mode,
             features,
-            spine_config,
-            spine_tools,
+            spine,
             config_lock_export_dir: spine_snapshot_settings.as_ref()
                 .and_then(|config_lock| config_lock.export_dir.clone()),
             config_lock_allow_codex_version_mismatch: spine_snapshot_settings.as_ref()

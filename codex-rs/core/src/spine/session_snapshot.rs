@@ -54,14 +54,7 @@ impl SessionConfiguration {
     pub(crate) fn to_config_lockfile_toml(&self) -> anyhow::Result<ConfigLockfileToml> {
         let lock_config = session_configuration_to_lock_config_toml(self)?;
         let config = self.original_config_do_not_use.as_ref();
-        let mut spine_config = match lock_config.spine_config_snapshot.as_ref() {
-            Some(snapshot) => snapshot.clone(),
-            None => crate::spine::config::lock_snapshot(
-                lock_config.spine_config_file.as_ref(), config.cwd.as_path(),
-                dirs::home_dir().as_deref(), config.active_project.is_trusted(),
-            )?,
-        };
-        spine_config.effective_config = Some(config.spine_config.snapshot_toml()?);
+        let spine_config = config.spine.snapshot().clone();
         Ok(config_lockfile(lock_config, spine_config))
     }
 }

@@ -83,25 +83,22 @@ fn additional_tools(body: &Value) -> Result<Vec<Value>> {
     Ok(tools)
 }
 
+#[test_case::test_case("removed")]
+#[test_case::test_case("malformed")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn resume_uses_saved_spine_tools_after_external_config_changes() -> Result<()> {
+async fn resume_uses_saved_spine_tools_after_external_config_changes(source_change: &str) -> Result<()> {
     let source_dir = tempfile::tempdir()?;
     let source = source_dir.path().join("spine.toml");
     std::fs::write(&source, "[tools.open]\ndescription = 'original saved description'\n")?;
     let mutable_source = source.clone();
-    let working_directory = source_dir.path().to_path_buf();
     let mut builder = spine_test_codex()
         .with_model("gpt-5.4")
         .with_model_info_override("gpt-5.4", |model| model.use_responses_lite = true)
-        .with_config(move |config| {
-            let sdk = spine_core::host::SpineConfigLoader::new(&working_directory)
-                .with_custom_path(&source)
-                .load()
-                .expect("load fixture SDK config")
-                .with_features([spine_core::host::Feature::Jit])
-                .expect("enable fixture JIT");
-            config.spine_tools = spine_core::host::ToolCatalog::new(&sdk).expect("fixture tools");
-            config.spine_config = sdk;
+        .with_pre_build_hook(move |home| {
+            let config_path = home.join("config.toml");
+            let config = format!("spine_config_file = {}\n[spine_snapshot]\nexport_dir = {}\n",
+                serde_json::to_string(&source).unwrap(), serde_json::to_string(&home.join("snapshots")).unwrap());
+            std::fs::write(config_path, config).expect("configure SDK source before ConfigBuilder");
         });
     let server = responses::start_mock_server().await;
     let first = responses::mount_sse_once(&server, responses::sse(vec![
@@ -114,7 +111,11 @@ async fn resume_uses_saved_spine_tools_after_external_config_changes() -> Result
     let expected_tools = additional_tools(&first.single_request().body_json()).context("initial sampling tools")?;
     assert!(serde_json::to_string(&expected_tools)?.contains("original saved description"));
 
-    std::fs::write(&mutable_source, "[tools.open]\ndescription = 'changed external description'\n")?;
+    match source_change {
+        "removed" => std::fs::remove_file(&mutable_source)?,
+        "malformed" => std::fs::write(&mutable_source, "[not valid TOML")?,
+        _ => unreachable!("fixture source mutation"),
+    }
     builder = builder.with_model_info_override("gpt-5.4", |model| model.use_responses_lite = true);
     let resumed = builder.restart(&server, &test).await?;
     let second = responses::mount_sse_once(&server, responses::sse(vec![

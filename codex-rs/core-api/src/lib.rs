@@ -136,4 +136,4 @@ pub use codex_utils_absolute_path::AbsolutePathBuf;
 
 pub use spine_core::host::Feature as SpineFeature;
 pub use spine_core::host::SpineConfig;
-pub use spine_core::host::ToolCatalog as SpineToolCatalog;
+pub use codex_core::config::SpineConfiguration;

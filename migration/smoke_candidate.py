@@ -121,9 +121,14 @@ def main():
         workspace = root / 'workspace'
         home.mkdir()
         workspace.mkdir()
-        (home / 'config.toml').write_text(f'''model = "gpt-5.4"
+        sdk_source = root / 'spine.toml'
+        sdk_source.write_text('[tools.open]\ndescription = "Saved package smoke tools"\n')
+        (home / 'config.toml').write_text(f'''spine_config_file = "{sdk_source.as_posix()}"
+model = "gpt-5.4"
 model_provider = "migration_mock"
 approval_policy = "never"
+[spine_snapshot]
+export_dir = "{(home / 'snapshots').as_posix()}"
 [model_providers.migration_mock]
 name = "Migration mock"
 base_url = "http://127.0.0.1:{model.server_port}/v1"
@@ -136,18 +141,32 @@ code_mode = true
         environment = dict(os.environ, CODEX_HOME=str(home), MIGRATION_MOCK_KEY='synthetic-test-key')
         environment['NO_PROXY'] = '127.0.0.1,localhost'
         environment['no_proxy'] = environment['NO_PROXY']
+        probe = subprocess.run([str(binary), 'mcp-server'], input=json.dumps({
+            'jsonrpc': '2.0', 'id': 1, 'method': 'initialize',
+            'params': {'protocolVersion': '2024-11-05', 'capabilities': {},
+                       'clientInfo': {'name': 'migration-product-probe', 'version': '0.4.0'}},
+        }) + '\n', text=True, capture_output=True, env=environment, timeout=30, check=True)
+        product = next(json.loads(line)['result']['serverInfo']['version']
+                       for line in probe.stdout.splitlines() if json.loads(line).get('id') == 1)
+        assert product == '0.4.0', product
         with (args.log_dir / 'app-server.stderr').open('w') as stderr:
             app = AppServer(binary, environment, stderr)
             started = app.request('thread/start', {'cwd': str(workspace), 'approvalPolicy': 'never'})
             thread_id = started['thread']['id']
             app.turn(thread_id, 'first isolated migration smoke turn')
             app.close()
+            sdk_source.unlink()
             app = AppServer(binary, environment, stderr)
             resumed = app.request('thread/resume', {'threadId': thread_id, 'excludeTurns': True})
             assert resumed['thread']['id'] == thread_id
             app.turn(thread_id, 'second isolated migration smoke turn')
+            forked = app.request('thread/fork', {'threadId': thread_id, 'excludeTurns': True})
+            fork_id = forked['thread']['id']
+            assert fork_id != thread_id
+            app.turn(fork_id, 'continue the fork with the saved SDK configuration')
             app.close()
-        assert len(MockModel.requests) == 3, len(MockModel.requests)
+        assert len(list((home / 'snapshots').glob('*.config.lock.toml'))) == 2
+        assert len(MockModel.requests) == 4, len(MockModel.requests)
         outputs = [item for item in MockModel.requests[1]['input'] if item.get('call_id') == 'smoke-exec-call' and item['type'] == 'custom_tool_call_output']
         assert len(outputs) == 1, outputs
         execution = json.loads(outputs[0]['output'][-1]['text'])
@@ -157,7 +176,7 @@ code_mode = true
         assert 'second isolated migration smoke turn' in json.dumps(MockModel.requests[2]['input'])
         (args.log_dir / 'requests.json').write_text(json.dumps(MockModel.requests, indent=2))
     model.shutdown()
-    print(json.dumps({'cliVersion': version, 'requests': 3, 'codeModeExecution': 'passed', 'resume': 'passed', 'shutdown': 'passed'}))
+    print(json.dumps({'cliVersion': version, 'productVersion': product, 'requests': 4, 'fork': 'passed', 'savedConfigAfterSourceRemoval': 'passed', 'codeModeExecution': 'passed', 'resume': 'passed', 'shutdown': 'passed'}))
 
 
 if __name__ == '__main__':

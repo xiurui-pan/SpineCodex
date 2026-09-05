@@ -283,13 +283,8 @@ fn set_feature(turn: &mut TurnContext, feature: Feature, enabled: bool) {
     if config.features.enabled(Feature::SpineSpawn) && config.features.enabled(Feature::SpineJit) {
         spine_features.push(spine_core::host::Feature::Spawn);
     }
-    config.spine_config = config
-        .spine_config
-        .clone()
-        .with_features(spine_features)
-        .expect("test Spine configuration");
-    config.spine_tools =
-        spine_core::host::ToolCatalog::new(&config.spine_config).expect("test Spine tool catalog");
+    let sdk = config.spine.sdk().clone().with_features(spine_features).expect("test Spine configuration");
+    config.spine = crate::config::SpineConfiguration::from_sdk(sdk).expect("test Spine tools");
     turn.config = Arc::new(config);
 }
 
@@ -414,8 +409,7 @@ description = "{description}"
             ])
             .unwrap();
         let mut config = (*turn.config).clone();
-        config.spine_tools = spine_core::host::ToolCatalog::new(&spine_config).unwrap();
-        config.spine_config = spine_config;
+        config.spine = crate::config::SpineConfiguration::from_sdk(spine_config).unwrap();
         turn.config = Arc::new(config);
     })
     .await;

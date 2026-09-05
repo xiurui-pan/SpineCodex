@@ -2948,6 +2948,7 @@ dependencies = [
  "codex-protocol",
  "codex-state",
  "codex-utils-absolute-path",
+ "spine-core",
 ]
 
 [[package]]
