@@ -121,23 +121,34 @@ impl SpineConfig {
             ("spawn", &self.tool_descriptions.spawn),
         ] {
             if let Some(description) = description {
-                tools.insert(name.to_string(), toml::Value::Table(toml::Table::from_iter([
-                    ("description".to_string(), toml::Value::String(description.clone())),
-                ])));
+                tools.insert(
+                    name.to_string(),
+                    toml::Value::Table(toml::Table::from_iter([(
+                        "description".to_string(),
+                        toml::Value::String(description.clone()),
+                    )])),
+                );
             }
         }
-        let prompt = toml::Table::from_iter([
-            ("jit", &self.jit_prompt),
-            ("node", &self.node_prompt),
-            ("spawn", &self.spawn_prompt),
-            ("spawn_explicit_request_only", &self.spawn_explicit_request_only_prompt),
-            ("spawn_proactive", &self.spawn_proactive_prompt),
-        ].map(|(name, value)| (name.to_string(), toml::Value::String(value.clone()))));
+        let prompt = toml::Table::from_iter(
+            [
+                ("jit", &self.jit_prompt),
+                ("node", &self.node_prompt),
+                ("spawn", &self.spawn_prompt),
+                (
+                    "spawn_explicit_request_only",
+                    &self.spawn_explicit_request_only_prompt,
+                ),
+                ("spawn_proactive", &self.spawn_proactive_prompt),
+            ]
+            .map(|(name, value)| (name.to_string(), toml::Value::String(value.clone()))),
+        );
         toml::to_string(&toml::Table::from_iter([
             ("schema_version".to_string(), toml::Value::Integer(1)),
             ("prompt".to_string(), toml::Value::Table(prompt)),
             ("tools".to_string(), toml::Value::Table(tools)),
-        ])).map_err(|error| ConfigError::InvalidToml(error.to_string()))
+        ]))
+        .map_err(|error| ConfigError::InvalidToml(error.to_string()))
     }
 
     pub fn v1() -> Self {

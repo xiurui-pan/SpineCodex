@@ -26,11 +26,8 @@ use codex_core_api::EnvironmentManager;
 use codex_core_api::EventMsg;
 use codex_core_api::ExecServerRuntimePaths;
 use codex_core_api::ExtensionRegistryBuilder;
-use codex_core_api::Features;
 use codex_core_api::Feature;
-use codex_core_api::SpineFeature;
-use codex_core_api::SpineConfig;
-use codex_core_api::SpineConfiguration;
+use codex_core_api::Features;
 use codex_core_api::GhostSnapshotConfig;
 use codex_core_api::History;
 use codex_core_api::MemoriesConfig;
@@ -48,6 +45,9 @@ use codex_core_api::RealtimeAudioConfig;
 use codex_core_api::RealtimeConfig;
 use codex_core_api::SessionPickerViewMode;
 use codex_core_api::SessionSource;
+use codex_core_api::SpineConfig;
+use codex_core_api::SpineConfiguration;
+use codex_core_api::SpineFeature;
 use codex_core_api::SqliteConfig;
 use codex_core_api::StartIfIdleSubmission;
 use codex_core_api::StartThreadOptions;
@@ -190,10 +190,13 @@ fn new_config(model: Option<String>, arg0_paths: Arg0DispatchPaths) -> anyhow::R
 
     let features = Features::with_defaults();
     let spine_config = SpineConfig::default().with_features(
-        [(Feature::SpineJit, SpineFeature::Jit), (Feature::SpineSpawn, SpineFeature::Spawn)]
-            .into_iter()
-            .filter(|(feature, _)| features.enabled(*feature))
-            .map(|(_, feature)| feature),
+        [
+            (Feature::SpineJit, SpineFeature::Jit),
+            (Feature::SpineSpawn, SpineFeature::Spawn),
+        ]
+        .into_iter()
+        .filter(|(feature, _)| features.enabled(*feature))
+        .map(|(_, feature)| feature),
     )?;
     let spine = SpineConfiguration::from_sdk(spine_config)?;
     let mut config = Config {

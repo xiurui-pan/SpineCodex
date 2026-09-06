@@ -142,7 +142,9 @@ where
     // A confined history scroll region requires two rows. Use the release's full-screen
     // insertion for this topology, including when the composer occupies the entire terminal.
     let mode = match mode {
-        InsertHistoryMode::Standard if area.top().saturating_add(viewport_shift) < 2 => InsertHistoryMode::FullScreen,
+        InsertHistoryMode::Standard if area.top().saturating_add(viewport_shift) < 2 => {
+            InsertHistoryMode::FullScreen
+        }
         InsertHistoryMode::Standard => InsertHistoryMode::Standard,
         InsertHistoryMode::FullScreen => InsertHistoryMode::FullScreen,
     };

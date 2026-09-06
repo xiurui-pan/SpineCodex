@@ -367,7 +367,11 @@ mod tests {
     fn render_status_line(widget: &StatusIndicatorWidget, width: u16) -> String {
         let mut terminal = Terminal::new(TestBackend::new(width, 1)).expect("terminal");
         terminal
-            .draw(|frame| widget.with_timer(&StatusTimer::default()).render(frame.area(), frame.buffer_mut()))
+            .draw(|frame| {
+                widget
+                    .with_timer(&StatusTimer::default())
+                    .render(frame.area(), frame.buffer_mut())
+            })
             .expect("draw");
         terminal.backend().buffer().content()[..usize::from(width)]
             .iter()
@@ -423,7 +427,11 @@ mod tests {
 
         let mut terminal = Terminal::new(TestBackend::new(80, 1)).expect("terminal");
         terminal
-            .draw(|frame| widget.with_timer(&StatusTimer::default()).render(frame.area(), frame.buffer_mut()))
+            .draw(|frame| {
+                widget
+                    .with_timer(&StatusTimer::default())
+                    .render(frame.area(), frame.buffer_mut())
+            })
             .expect("draw");
         insta::assert_snapshot!(terminal.backend());
 
@@ -437,7 +445,10 @@ mod tests {
             .buffer()
             .cell((3, 0))
             .expect("activity word cell");
-        let expected_green = crate::motion::green_growth_marker(Duration::ZERO, MotionMode::Reduced).style.fg;
+        let expected_green =
+            crate::motion::green_growth_marker(Duration::ZERO, MotionMode::Reduced)
+                .style
+                .fg;
         assert_eq!(marker.style().fg, expected_green);
         assert_eq!(word.style().fg, expected_green);
     }

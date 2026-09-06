@@ -19,31 +19,39 @@ impl CodexSpineCoordinator {
         let mut replay_record_thread = replay_thread.clone();
         let continuation_thread = self.runtime.thread().clone();
 
-        let first_started = effective.iter().enumerate().find_map(|(index, (_, item))| {
-            match item {
-                RolloutItem::SpineSamplingStarted(started) => Some((index, started)),
-                _ => None,
-            }
-        });
+        let first_started =
+            effective
+                .iter()
+                .enumerate()
+                .find_map(|(index, (_, item))| match item {
+                    RolloutItem::SpineSamplingStarted(started) => Some((index, started)),
+                    _ => None,
+                });
         let start_index = if let Some((index, started)) = first_started
             && let Some(seed) = &started.replay_seed
         {
             // Opaque source identity is independent of host presentation. Keep the
             // persisted envelope (including output budgets) authoritative for it.
-            let persisted_items = effective[..index].iter().filter_map(|(_, item)| {
-                if let RolloutItem::ResponseItem(item) = item {
-                    item.item.id().map(|id| (id, item))
-                } else {
-                    None
-                }
-            }).collect::<std::collections::HashMap<_, _>>();
-            let seed: Vec<ReplaySeedItem> = serde_json::from_value(seed.clone())
-                .map_err(|error| CoordinatorError::Replay(format!("invalid initialization seed: {error}")))?;
+            let persisted_items = effective[..index]
+                .iter()
+                .filter_map(|(_, item)| {
+                    if let RolloutItem::ResponseItem(item) = item {
+                        item.item.id().map(|id| (id, item))
+                    } else {
+                        None
+                    }
+                })
+                .collect::<std::collections::HashMap<_, _>>();
+            let seed: Vec<ReplaySeedItem> =
+                serde_json::from_value(seed.clone()).map_err(|error| {
+                    CoordinatorError::Replay(format!("invalid initialization seed: {error}"))
+                })?;
             for item in seed {
                 match item {
                     ReplaySeedItem::Source { boundary, item } => {
                         let item = super::archive::seed_response_item(item)?;
-                        let (character, mut projected) = response_item_to_char_and_source(&item, RawBoundary(boundary));
+                        let (character, mut projected) =
+                            response_item_to_char_and_source(&item, RawBoundary(boundary));
                         if matches!(character, spine_core::host::SpineChar::Opaque { .. })
                             && let Some(id) = item.item.id()
                             && let Some(persisted) = persisted_items.get(id)
@@ -54,17 +62,36 @@ impl CodexSpineCoordinator {
                         projected_source_items.push(projected);
                         next_boundary = boundary.saturating_add(1);
                     }
-                    ReplaySeedItem::Compact { barrier, replacement } => {
+                    ReplaySeedItem::Compact {
+                        barrier,
+                        replacement,
+                    } => {
                         epoch = barrier.next_epoch;
-                        next_boundary = barrier.replacement_boundaries.last()
-                            .map_or(barrier.boundary.0, |boundary| boundary.0).saturating_add(1);
+                        next_boundary = barrier
+                            .replacement_boundaries
+                            .last()
+                            .map_or(barrier.boundary.0, |boundary| boundary.0)
+                            .saturating_add(1);
                         inputs.push(ReplayInput::Compact(barrier));
-                        projected_source_items = replacement.into_iter().map(super::archive::seed_response_item).collect::<Result<Vec<_>, _>>()?;
+                        projected_source_items = replacement
+                            .into_iter()
+                            .map(super::archive::seed_response_item)
+                            .collect::<Result<Vec<_>, _>>()?;
                     }
-                    ReplaySeedItem::Usage { boundary, input_tokens, model_context_window } => {
-                        inputs.push(ReplayInput::Usage(TokenUsageSample { boundary: RawBoundary(boundary), input_tokens }));
+                    ReplaySeedItem::Usage {
+                        boundary,
+                        input_tokens,
+                        model_context_window,
+                    } => {
+                        inputs.push(ReplayInput::Usage(TokenUsageSample {
+                            boundary: RawBoundary(boundary),
+                            input_tokens,
+                        }));
                         if let Some(model_context_window) = model_context_window {
-                            context_window_samples.push(ContextWindowSample { boundary: RawBoundary(boundary), model_context_window });
+                            context_window_samples.push(ContextWindowSample {
+                                boundary: RawBoundary(boundary),
+                                model_context_window,
+                            });
                         }
                     }
                 }
@@ -108,15 +135,20 @@ impl CodexSpineCoordinator {
                     let boundary = RawBoundary(next_boundary);
                     let replacement_items =
                         compacted.replacement_history.clone().unwrap_or_else(|| {
-                            vec![ResponseItem::Message {
-                                id: None,
-                                role: "assistant".to_string(),
-                                content: vec![codex_protocol::models::ContentItem::OutputText {
-                                    text: compacted.message.clone(),
-                                }],
-                                phase: None,
-                                internal_chat_message_metadata_passthrough: None,
-                            }.into()]
+                            vec![
+                                ResponseItem::Message {
+                                    id: None,
+                                    role: "assistant".to_string(),
+                                    content: vec![
+                                        codex_protocol::models::ContentItem::OutputText {
+                                            text: compacted.message.clone(),
+                                        },
+                                    ],
+                                    phase: None,
+                                    internal_chat_message_metadata_passthrough: None,
+                                }
+                                .into(),
+                            ]
                         });
                     let replacement_boundaries = (0..replacement_items.len())
                         .scan(boundary.0, |next, _| {

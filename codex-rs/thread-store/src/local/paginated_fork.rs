@@ -2,9 +2,9 @@ use std::io::BufRead;
 use std::io::BufReader;
 use std::sync::Arc;
 
-use codex_protocol::protocol::HistoryPosition;
 use codex_history::RolloutItem;
 use codex_history::RolloutLine;
+use codex_protocol::protocol::HistoryPosition;
 use codex_protocol::protocol::SessionMetaLine;
 
 use super::LocalThreadStore;
@@ -84,9 +84,10 @@ pub(super) async fn prepare(
             let sampling = find_spine_sampling_boundary(&lineage).await?;
             (Some(sampling.position), Some(sampling.complete_history))
         }
-        ForkBoundary::Latest | ForkBoundary::ThroughTurn(_) | ForkBoundary::BeforeTurn(_) => {
-            (history_base_at_boundary(store, thread_id, boundary, &lineage).await?, None)
-        }
+        ForkBoundary::Latest | ForkBoundary::ThroughTurn(_) | ForkBoundary::BeforeTurn(_) => (
+            history_base_at_boundary(store, thread_id, boundary, &lineage).await?,
+            None,
+        ),
     };
     drop(source_writer_guard);
     let startup = model_context::load_for_fork(lineage, history_base).await?;
@@ -243,14 +244,13 @@ fn find_spine_sampling_boundary_blocking(
     let mut complete_history = vec![RolloutItem::SessionMeta(session_meta)];
     let mut open_sampling = None;
     for segment in lineage.segments() {
-        let file = codex_rollout::open_rollout_seekable_reader(segment.rollout_path.as_path()).map_err(|err| {
-            ThreadStoreError::Internal {
+        let file = codex_rollout::open_rollout_seekable_reader(segment.rollout_path.as_path())
+            .map_err(|err| ThreadStoreError::Internal {
                 message: format!(
                     "failed to open sampling-boundary rollout {}: {err}",
                     segment.rollout_path.display()
                 ),
-            }
-        })?;
+            })?;
         let end_byte_offset = match segment.end {
             Some(end) => end.end_byte_offset,
             None => file

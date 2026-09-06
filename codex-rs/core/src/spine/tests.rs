@@ -1,21 +1,24 @@
 use super::*;
+use codex_history::CompactedItem;
 use codex_protocol::ResponseItemId;
 use codex_protocol::models::FunctionCallOutputPayload;
-use codex_history::CompactedItem;
 use codex_protocol::protocol::ThreadRolledBackEvent;
 use codex_protocol::protocol::WorldStateItem;
 use pretty_assertions::assert_eq;
 
 fn message(role: &str, text: &str) -> RolloutItem {
-    RolloutItem::ResponseItem(ResponseItem::Message {
-        id: None,
-        role: role.to_string(),
-        content: vec![ContentItem::InputText {
-            text: text.to_string(),
-        }],
-        phase: None,
-        internal_chat_message_metadata_passthrough: None,
-    }.into())
+    RolloutItem::ResponseItem(
+        ResponseItem::Message {
+            id: None,
+            role: role.to_string(),
+            content: vec![ContentItem::InputText {
+                text: text.to_string(),
+            }],
+            phase: None,
+            internal_chat_message_metadata_passthrough: None,
+        }
+        .into(),
+    )
 }
 
 fn response_items(effective: &[(usize, &RolloutItem)]) -> Vec<codex_history::ResponseItemEnvelope> {
@@ -100,7 +103,10 @@ fn non_context_rollout_records_do_not_change_source_ordinals() {
         user,
         RolloutItem::WorldState(WorldStateItem {
             full: true,
-            state: serde_json::json!({"cwd":"/tmp"}).as_object().cloned().expect("fixture object"),
+            state: serde_json::json!({"cwd":"/tmp"})
+                .as_object()
+                .cloned()
+                .expect("fixture object"),
         }),
         assistant,
     ];
@@ -226,7 +232,10 @@ fn multimodal_user_item_is_preserved_while_text_is_anchored() {
     let RolloutItem::ResponseItem(effective_item) = effective[0].1 else {
         panic!("expected response item");
     };
-    assert_eq!(effective_item, &codex_history::ResponseItemEnvelope::new(item));
+    assert_eq!(
+        effective_item,
+        &codex_history::ResponseItemEnvelope::new(item)
+    );
 }
 
 #[test]
@@ -240,8 +249,8 @@ fn contextual_user_message_does_not_consume_an_anchor() {
         _ => unreachable!(),
     };
     let rollout = vec![
-        RolloutItem::ResponseItem(contextual.clone().into()),
-        RolloutItem::ResponseItem(request.clone().into()),
+        RolloutItem::ResponseItem(contextual.clone()),
+        RolloutItem::ResponseItem(request.clone()),
     ];
     let effective = effective_rollout(&rollout);
     let projected = materialize_context(

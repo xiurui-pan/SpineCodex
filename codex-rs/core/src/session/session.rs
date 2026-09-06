@@ -1,4 +1,3 @@
-use crate::session::spine_snapshot::export_config_lock_if_configured;
 use super::input_queue::InputQueue;
 use super::mcp_refresh::McpRefresh;
 use super::step_settings::ModelInfoOverrides;
@@ -13,6 +12,7 @@ use crate::environment_selection::TurnEnvironmentSnapshot;
 use crate::hook_mcp_executor::CoreHookMcpExecutor;
 use crate::responses_metadata::CodexResponsesMetadata;
 use crate::responses_metadata::CodexResponsesRequestKind;
+use crate::session::spine_snapshot::export_config_lock_if_configured;
 use crate::shell_snapshot::ShellSnapshot;
 use crate::state::ActiveTurn;
 use codex_extension_api::ExtensionDataInit;

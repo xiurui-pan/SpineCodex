@@ -1,5 +1,5 @@
-use codex_history::ResponseItemEnvelope;
 use super::message_from_response_item;
+use codex_history::ResponseItemEnvelope;
 use codex_protocol::models::ResponseItem;
 use spine_core::host::RawBoundary;
 use spine_core::host::SpineChar;

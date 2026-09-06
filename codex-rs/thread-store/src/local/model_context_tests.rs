@@ -604,7 +604,8 @@ async fn replays_nested_archived_lineage_from_frozen_prefix() {
         .await
         .expect("load complete compressed frozen lineage");
     assert_eq!(
-        serde_json::to_value(compressed_complete.items).expect("serialize compressed complete lineage"),
+        serde_json::to_value(compressed_complete.items)
+            .expect("serialize compressed complete lineage"),
         serde_json::to_value(expected_complete).expect("serialize expected complete lineage")
     );
     assert!(

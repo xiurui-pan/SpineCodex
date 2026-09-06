@@ -283,7 +283,12 @@ fn set_feature(turn: &mut TurnContext, feature: Feature, enabled: bool) {
     if config.features.enabled(Feature::SpineSpawn) && config.features.enabled(Feature::SpineJit) {
         spine_features.push(spine_core::host::Feature::Spawn);
     }
-    let sdk = config.spine.sdk().clone().with_features(spine_features).expect("test Spine configuration");
+    let sdk = config
+        .spine
+        .sdk()
+        .clone()
+        .with_features(spine_features)
+        .expect("test Spine configuration");
     config.spine = crate::config::SpineConfiguration::from_sdk(sdk).expect("test Spine tools");
     turn.config = Arc::new(config);
 }

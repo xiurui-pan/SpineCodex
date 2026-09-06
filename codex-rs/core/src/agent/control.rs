@@ -28,7 +28,6 @@ use crate::thread_rollout_truncation::truncate_rollout_to_last_n_fork_turns;
 use crate::turn_timing::now_unix_timestamp_ms;
 use arc_swap::ArcSwapOption;
 use codex_history::InitialHistory;
-use codex_history::ResumedHistory;
 use codex_history::RolloutItem;
 use codex_protocol::AgentPath;
 use codex_protocol::SessionId;
@@ -76,8 +75,8 @@ mod legacy;
 mod residency;
 mod service_tier;
 mod spawn;
-mod user_authorization;
 mod spine;
+mod user_authorization;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum SpawnAgentForkMode {

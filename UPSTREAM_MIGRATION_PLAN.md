@@ -142,14 +142,14 @@ P0 基线与差分清单
 
 主要范围：`Cargo.toml`、目标 `build-info/`、provider/models/login、CLI、npm 包装、Desktop launcher 和 Spine release workflow。
 
-- [ ] 同步更新 `codex_compat_version`、`codex_upstream_tag`、`codex_upstream_commit` 到固定目标。
-- [ ] 保留 Spine 独立产品版本和发布渠道，逐一核对上游新增 build-info 的使用方。
-- [ ] 核对 `/models?client_version=...`、User-Agent、provider version header、app-server initialize 及 daemon 探测所用的身份合同。
+- [x] 同步更新 `codex_compat_version`、`codex_upstream_tag`、`codex_upstream_commit` 到固定目标。
+- [x] 保留 Spine 独立产品版本和发布渠道，逐一核对上游新增 build-info 的使用方。
+- [x] 核对 `/models?client_version=...`、User-Agent、provider version header、app-server initialize 及 daemon 探测所用的身份合同。
 - [ ] 验证更新缓存隔离、npm 二进制解析、CLI/exec 版本输出和 Desktop launcher。
-- [ ] 更新实际变化的 Cargo/Bazel lock、schema、资源声明和发布元数据检查。
-- [ ] 完成以下回归矩阵，记录命令、退出状态、测试数量、目标 SHA 和残留问题。
+- [x] 更新实际变化的 Cargo/Bazel lock、schema、资源声明和发布元数据检查。
+- [x] 完成以下回归矩阵，记录命令、退出状态、测试数量、目标 SHA 和残留问题。
 - [ ] 构建本地产物并完成隔离配置下的启动、恢复与关闭冒烟检查，随后完成 Linux/macOS/Windows CI。
-- [ ] 整理候选版本说明、兼容性说明和构建来源；发布作为后续明确操作执行。
+- [x] 整理候选版本说明、兼容性说明和构建来源；发布作为后续明确操作执行。
 
 完成标准：候选产物可追溯至固定上游 SHA 与 Spine 提交，身份和包内容正确，要求的测试全部完成，未解决的行为差异有明确记录。
 

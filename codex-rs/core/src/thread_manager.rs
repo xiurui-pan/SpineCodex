@@ -1276,11 +1276,16 @@ impl ThreadManager {
         &self,
         rollout_path: PathBuf,
     ) -> CodexResult<InitialHistory> {
-        let metadata = self.state.thread_store.read_thread_by_rollout_path(ReadThreadByRolloutPathParams {
-            rollout_path: rollout_path.clone(),
-            include_archived: true,
-            include_history: false,
-        }).await.map_err(thread_store_rollout_read_error)?;
+        let metadata = self
+            .state
+            .thread_store
+            .read_thread_by_rollout_path(ReadThreadByRolloutPathParams {
+                rollout_path: rollout_path.clone(),
+                include_archived: true,
+                include_history: false,
+            })
+            .await
+            .map_err(thread_store_rollout_read_error)?;
         let mut history = self.state.load_resumed_history(&metadata).await?;
         history.rollout_path = Some(rollout_path);
         Ok(InitialHistory::Resumed(history))

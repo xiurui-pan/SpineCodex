@@ -8,7 +8,8 @@ impl Session {
         world_state: &WorldState,
     ) -> Vec<ResponseItem> {
         let window_ids = self.state.lock().await.auto_compact_window_ids();
-        self.build_initial_context_for_window(turn_context, world_state, window_ids).await
+        self.build_initial_context_for_window(turn_context, world_state, window_ids)
+            .await
     }
 
     pub(super) async fn build_initial_context_for_window(
@@ -21,7 +22,13 @@ impl Session {
         let mut contextual_user_sections = Vec::<RenderedFragment>::with_capacity(2);
         let mut separate_developer_sections = Vec::<RenderedFragment>::new();
         let mut context_window_hints = Vec::new();
-        let session_source = self.state.lock().await.session_configuration.session_source.clone();
+        let session_source = self
+            .state
+            .lock()
+            .await
+            .session_configuration
+            .session_source
+            .clone();
         let separate_guardian_developer_message =
             crate::guardian::is_basic_session_source(&session_source);
         // Keep the guardian policy prompt out of the aggregated developer bundle so it
@@ -238,5 +245,4 @@ impl Session {
         }
         items
     }
-
 }

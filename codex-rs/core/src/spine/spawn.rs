@@ -1,7 +1,3 @@
-use crate::session::step_context::StepContext;
-use crate::session::multi_agents::resolve_usage_hints;
-use codex_protocol::protocol::MultiAgentVersion;
-use codex_protocol::turn_input::TurnStartOptions;
 use crate::agent::AgentStatus;
 use crate::agent::control::SpawnAgentBatchRequest;
 use crate::agent::control::SpawnAgentForkMode;
@@ -10,7 +6,9 @@ use crate::agent::next_thread_spawn_depth;
 use crate::agent_communication::AgentCommunicationContext;
 use crate::agent_communication::AgentCommunicationKind;
 use crate::session::MailboxSubmissionCancellation;
+use crate::session::multi_agents::resolve_usage_hints;
 use crate::session::session::Session;
+use crate::session::step_context::StepContext;
 use crate::tools::handlers::multi_agents_common::build_agent_spawn_config;
 use crate::tools::handlers::multi_agents_common::thread_spawn_source;
 use codex_protocol::AgentPath;
@@ -19,8 +17,10 @@ use codex_protocol::error::CodexErrorDetails;
 use codex_protocol::models::ContentItem;
 use codex_protocol::models::ResponseItem;
 use codex_protocol::protocol::InterAgentCommunication;
+use codex_protocol::protocol::MultiAgentVersion;
 use codex_protocol::protocol::SpineSpawnProgressEvent;
 use codex_protocol::protocol::SpineSpawnTaskProgress;
+use codex_protocol::turn_input::TurnStartOptions;
 use codex_protocol::user_input::UserInput;
 use futures::future::join_all;
 use spine_core::host::SPINE_SPAWN_RESULT_SCHEMA;
@@ -292,16 +292,17 @@ async fn execute_transaction(
         return Err("spine.spawn was cancelled before child creation".to_string());
     }
 
-    let mut config = build_agent_spawn_config(
-        &session.get_base_instructions().await,
-        turn.as_ref(),
-    )
-    .map_err(|error| error.to_string())?;
+    let mut config =
+        build_agent_spawn_config(&session.get_base_instructions().await, turn.as_ref())
+            .map_err(|error| error.to_string())?;
     config.model = Some(step_context.settings.model_info.slug.clone());
     config.model_reasoning_effort = step_context.settings.reasoning_effort().cloned();
     config.model_reasoning_summary = Some(step_context.settings.reasoning_summary);
     config.service_tier = step_context.settings.service_tier.clone();
-    config.permissions.approval_policy.set(step_context.settings.approval_policy())
+    config
+        .permissions
+        .approval_policy
+        .set(step_context.settings.approval_policy())
         .map_err(|error| error.to_string())?;
     config.approvals_reviewer = step_context.settings.approvals_reviewer();
     let child_depth = next_thread_spawn_depth(&turn.session_source);
@@ -486,7 +487,11 @@ fn spawn_options(
     config: &crate::config::Config,
 ) -> SpawnAgentOptions {
     let turn = &step.turn;
-    let catalog = step.settings.model_info.model_messages.as_ref()
+    let catalog = step
+        .settings
+        .model_info
+        .model_messages
+        .as_ref()
         .and_then(|messages| messages.multi_agent.as_ref())
         .and_then(|messages| messages.role.as_ref());
     SpawnAgentOptions {
@@ -497,13 +502,15 @@ fn spawn_options(
         root_turn_id: turn.turn_metadata_state.root_turn_id(),
         environments: Some(step.environments.to_selections()),
         cyber_access_program: turn.cyber_access_program,
-        multi_agent_v2_usage_hints: (turn.multi_agent_version == MultiAgentVersion::V2).then(|| {
-            resolve_usage_hints(
-                &config.multi_agent_v2,
-                catalog,
-                !config.update_plan_enabled && config.model_catalog.is_none(),
-            )
-        }),
+        multi_agent_v2_usage_hints: (turn.multi_agent_version == MultiAgentVersion::V2).then(
+            || {
+                resolve_usage_hints(
+                    &config.multi_agent_v2,
+                    catalog,
+                    !config.update_plan_enabled && config.model_catalog.is_none(),
+                )
+            },
+        ),
     }
 }
 
@@ -627,7 +634,10 @@ async fn correct_intermediate_messages(
             .services
             .agent_control
             .send_inter_agent_communication(
-                thread_id, correction, context, codex_protocol::turn_input::TurnStartOptions::default(),
+                thread_id,
+                correction,
+                context,
+                codex_protocol::turn_input::TurnStartOptions::default(),
             )
             .await;
     }

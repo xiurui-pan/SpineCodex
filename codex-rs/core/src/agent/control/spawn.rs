@@ -2,9 +2,9 @@ use super::execution::AgentExecutionReservation;
 use super::residency::V2ResidencySlot;
 use super::residency::is_v2_resident_session_source;
 use super::*;
+use crate::agent::registry::SpawnReservation;
 use crate::agent::role::apply_role_to_config;
 use crate::codex_thread::CodexThread;
-use crate::agent::registry::SpawnReservation;
 use crate::config::PermissionProfileSnapshot;
 use crate::context::ContextualUserFragment;
 use crate::context::CurrentTimeReminder;
@@ -20,8 +20,8 @@ use codex_context_fragments::to_annotated_content;
 use codex_extension_api::ExtensionDataInit;
 use codex_protocol::intersect_effective_permission_profiles;
 use codex_protocol::protocol::EnvironmentConfigState;
-use codex_utils_path_uri::PathUri;
 use codex_thread_store::ForkBoundary;
+use codex_utils_path_uri::PathUri;
 
 const AGENT_NAMES: &str = include_str!("../../../assets/agent/agent_names.txt");
 
@@ -520,7 +520,8 @@ impl AgentControl {
         let stored_reasoning_effort = stored_thread.reasoning_effort.clone();
         let stored_source = stored_thread.source.clone();
         let stored_parent_thread_id = stored_thread.parent_thread_id;
-        let initial_history = InitialHistory::Resumed(state.load_resumed_history(&stored_thread).await?);
+        let initial_history =
+            InitialHistory::Resumed(state.load_resumed_history(&stored_thread).await?);
         if initial_history.get_multi_agent_version() != Some(MultiAgentVersion::V2) {
             return Err(CodexErr::ThreadNotFound(thread_id));
         }
@@ -965,12 +966,8 @@ impl AgentControl {
         };
         let initial_input_result = match initial_input {
             SpawnInitialInput::UserInput(input) => {
-                self.send_input(
-                    new_thread.thread_id,
-                    input,
-                    start_options,
-                )
-                .await
+                self.send_input(new_thread.thread_id, input, start_options)
+                    .await
             }
             SpawnInitialInput::InterAgentCommunication(communication, context) => {
                 self.send_inter_agent_communication_after_capacity_check(
@@ -1101,10 +1098,14 @@ impl AgentControl {
                 || *fork_mode == SpawnAgentForkMode::FullHistory
                     && subagent_developer_instructions.is_some());
         let checkpoint_prefix = if needs_spine_checkpoint {
-            Some(state.prepare_fork(
-                parent_thread_id,
-                ForkBoundary::ThroughLatestSpineSamplingStarted,
-            ).await?)
+            Some(
+                state
+                    .prepare_fork(
+                        parent_thread_id,
+                        ForkBoundary::ThroughLatestSpineSamplingStarted,
+                    )
+                    .await?,
+            )
         } else {
             None
         };
@@ -1429,10 +1430,14 @@ impl AgentControl {
         }
         if let Some(prepared) = &checkpoint_prefix {
             let prefix = prepared.complete_history.as_deref().ok_or_else(|| {
-                CodexErr::Fatal("Spine fork checkpoint requires complete source lineage".to_string())
+                CodexErr::Fatal(
+                    "Spine fork checkpoint requires complete source lineage".to_string(),
+                )
             })?;
-            forked_rollout_items = parent_thread.session
-                .checkpoint_spine_fork_context(prefix, &forked_rollout_items).await;
+            forked_rollout_items = parent_thread
+                .session
+                .checkpoint_spine_fork_context(prefix, &forked_rollout_items)
+                .await;
         }
         let mut thread_extension_init = ExtensionDataInit::new();
         thread_extension_init.insert(selected_capability_roots);
@@ -1554,7 +1559,8 @@ impl AgentControl {
             .map_err(|err| CodexErr::InvalidRequest(format!("invalid stored agent path: {err}")))?;
         let resumed_agent_nickname = stored_thread.agent_nickname.clone();
         let resumed_agent_role = stored_thread.agent_role.clone();
-        let initial_history = InitialHistory::Resumed(state.load_resumed_history(&stored_thread).await?);
+        let initial_history =
+            InitialHistory::Resumed(state.load_resumed_history(&stored_thread).await?);
         let parent_thread_id = stored_thread.parent_thread_id;
         let multi_agent_version = state
             .effective_multi_agent_version_for_spawn(

@@ -2258,7 +2258,8 @@ async fn record_initial_history_reconstructs_resumed_transcript() {
             history: Arc::new(rollout_items),
             rollout_path: Some(PathBuf::from("/tmp/resume.jsonl")),
         }))
-        .await.expect("restore fixture history");
+        .await
+        .expect("restore fixture history");
 
     let history = session.state.lock().await.clone_history();
     assert_eq!(expected, raw_history_items(&history));
@@ -2441,7 +2442,8 @@ async fn record_inter_agent_communication_sets_turn_id_in_rollout_and_resume() {
     let (resumed_session, _resumed_turn_context) = make_session_and_context().await;
     resumed_session
         .record_initial_history(InitialHistory::Resumed(resumed))
-        .await.expect("restore fixture history");
+        .await
+        .expect("restore fixture history");
     assert_eq!(
         strip_response_item_ids(&raw_history_items(&resumed_session.clone_history().await)),
         strip_response_item_ids(std::slice::from_ref(&expected_item))
@@ -2510,7 +2512,8 @@ async fn record_inter_agent_communication_preserves_item_id_in_rollout_and_resum
         .await;
     resumed_session
         .record_initial_history(InitialHistory::Resumed(resumed))
-        .await.expect("restore fixture history");
+        .await
+        .expect("restore fixture history");
     let resumed_history = resumed_session.clone_history().await;
     let resumed_items = raw_history_items(&resumed_history);
     let [resumed_item] = resumed_items.as_slice() else {
@@ -2631,7 +2634,8 @@ async fn prepares_resumed_history_before_installing_it() {
             })]),
             rollout_path: Some(PathBuf::from("/tmp/resume.jsonl")),
         }))
-        .await.expect("restore fixture history");
+        .await
+        .expect("restore fixture history");
 
     let history = session.state.lock().await.clone_history();
     assert_eq!(
@@ -2743,7 +2747,10 @@ fn resolve_multi_agent_version_handles_unset_and_legacy_history() {
 async fn record_initial_history_new_defers_initial_context_until_first_turn() {
     let (session, _turn_context) = make_session_and_context().await;
 
-    session.record_initial_history(InitialHistory::New).await.expect("restore fixture history");
+    session
+        .record_initial_history(InitialHistory::New)
+        .await
+        .expect("restore fixture history");
 
     let history = session.clone_history().await;
     assert_eq!(raw_history_items(&history), Vec::<ResponseItem>::new());
@@ -2779,7 +2786,8 @@ async fn resumed_history_injects_initial_context_on_first_context_update_only() 
             history: Arc::new(rollout_items),
             rollout_path: Some(PathBuf::from("/tmp/resume.jsonl")),
         }))
-        .await.expect("restore fixture history");
+        .await
+        .expect("restore fixture history");
 
     let history_before_seed = session.state.lock().await.clone_history();
     assert_eq!(expected, raw_history_items(&history_before_seed));
@@ -2890,7 +2898,8 @@ async fn record_initial_history_seeds_token_info_from_rollout() {
             history: Arc::new(rollout_items),
             rollout_path: Some(PathBuf::from("/tmp/resume.jsonl")),
         }))
-        .await.expect("restore fixture history");
+        .await
+        .expect("restore fixture history");
 
     let actual = session.state.lock().await.token_info();
     assert_eq!(actual, Some(info2));
@@ -3459,7 +3468,8 @@ async fn record_initial_history_reconstructs_forked_transcript() {
 
     session
         .record_initial_history(InitialHistory::Forked(rollout_items))
-        .await.expect("restore fixture history");
+        .await
+        .expect("restore fixture history");
 
     let history = session.state.lock().await.clone_history();
     assert_eq!(
@@ -3582,7 +3592,8 @@ async fn record_initial_history_assigns_and_persists_id_for_forked_response_item
         .record_initial_history(InitialHistory::Forked(vec![RolloutItem::ResponseItem(
             response_item,
         )]))
-        .await.expect("restore fixture history");
+        .await
+        .expect("restore fixture history");
 
     let live_history = session.clone_history().await;
     let live_items = raw_history_items(&live_history);
@@ -3840,7 +3851,8 @@ async fn record_initial_history_forked_hydrates_previous_turn_settings() {
 
     session
         .record_initial_history(InitialHistory::Forked(rollout_items))
-        .await.expect("restore fixture history");
+        .await
+        .expect("restore fixture history");
 
     let history = session.clone_history().await;
     assert_eq!(
@@ -5947,7 +5959,11 @@ async fn compaction_checkpoint_waits_for_accepted_settings_persistence() {
     let committed = session.thread_settings_snapshot().await;
     let history_before = session.clone_history().await;
     let (window_number, window_ids) = session.next_auto_compact_window().await;
-    session.state.lock().await.install_auto_compact_window(window_number, window_ids.clone());
+    session
+        .state
+        .lock()
+        .await
+        .install_auto_compact_window(window_number, window_ids);
     let mut checkpoint = Box::pin(tokio::task::unconstrained(
         session.replace_compacted_history(
             vec![ResponseItemEnvelope::new(user_message("compacted history"))],
@@ -6617,7 +6633,13 @@ pub(crate) async fn make_session_and_context() -> (Session, TurnContext) {
     };
 
     let session = Session {
-        spine: crate::spine::coordinator::SpineSessionAdapter::from_configuration_with_observer(/*enabled*/ false, thread_id.to_string(), spine_core::host::SpineConfig::default(), Default::default()).expect("disabled test Spine"),
+        spine: crate::spine::coordinator::SpineSessionAdapter::from_configuration_with_observer(
+            /*enabled*/ false,
+            thread_id.to_string(),
+            spine_core::host::SpineConfig::default(),
+            Default::default(),
+        )
+        .expect("disabled test Spine"),
         spine_spawn_lifecycle: Default::default(),
         thread_id,
         installation_id: "11111111-1111-4111-8111-111111111111".to_string(),
@@ -6895,7 +6917,13 @@ async fn spine_session_persist_failure_does_not_install_canonical_commit() -> an
             .ok_or_else(|| anyhow::anyhow!("Spine coordinator is unavailable"))?;
         let attempt = coordinator.begin_sampling()?;
         coordinator.sampling_started_rollout_item(&attempt, &[])?;
-        coordinator.observe_response_items(&(&[user_message("unpersisted source")]).iter().cloned().map(Into::into).collect::<Vec<_>>())?;
+        coordinator.observe_response_items(
+            &[user_message("unpersisted source")]
+                .iter()
+                .cloned()
+                .map(Into::into)
+                .collect::<Vec<_>>(),
+        )?;
         coordinator.prepare_canonical_sampling(attempt)?
     };
     let before = session
@@ -6977,7 +7005,13 @@ async fn spine_session_prepared_commit_rejects_racing_source_before_persistence(
         coordinator
             .as_mut()
             .ok_or_else(|| anyhow::anyhow!("Spine coordinator is unavailable"))?
-            .observe_response_items(&(&[user_message("racing source after prepare")]).iter().cloned().map(Into::into).collect::<Vec<_>>())
+            .observe_response_items(
+                &[user_message("racing source after prepare")]
+                    .iter()
+                    .cloned()
+                    .map(Into::into)
+                    .collect::<Vec<_>>(),
+            )
             .expect_err("prepared commit must exclude racing source")
     };
     assert!(matches!(
@@ -7074,8 +7108,8 @@ async fn record_closed_spine_memory(
             internal_chat_message_metadata_passthrough: None,
         },
         ResponseItem::FunctionCallOutput {
-        name: None,
-        namespace: None,
+            name: None,
+            namespace: None,
             id: None,
             call_id: Some("open-call".to_string()),
             output: FunctionCallOutputPayload {
@@ -7095,8 +7129,8 @@ async fn record_closed_spine_memory(
             internal_chat_message_metadata_passthrough: None,
         },
         ResponseItem::FunctionCallOutput {
-        name: None,
-        namespace: None,
+            name: None,
+            namespace: None,
             id: None,
             call_id: Some("close-call".to_string()),
             output: FunctionCallOutputPayload {
@@ -7283,7 +7317,8 @@ async fn spinetree_memory_projection_rebuilds_user_messages_after_rollout_recons
     let reconstructed_turn = reconstructed_session.new_default_turn().await;
     reconstructed_session
         .apply_rollout_reconstruction(reconstructed_turn.as_ref(), &rollout)
-        .await.expect("restore fixture history");
+        .await
+        .expect("restore fixture history");
 
     let expected_user_messages =
         "# User Messages\n\n## User Message [U1]\nrequest\n\n## User Message [U2]\ndetail\n";
@@ -7292,7 +7327,8 @@ async fn spinetree_memory_projection_rebuilds_user_messages_after_rollout_recons
         &reconstructed_workspace.path().join(".codex/spinetree"),
         "1.1_task.md",
         expected_memory,
-    ).await?;
+    )
+    .await?;
     let session_dir = wait_for_spinetree_file(
         &reconstructed_workspace.path().join(".codex/spinetree"),
         "USER.md",
@@ -7369,8 +7405,8 @@ async fn spine_observer_publishes_after_install_even_when_memory_projection_fail
                     internal_chat_message_metadata_passthrough: None,
                 },
                 ResponseItem::FunctionCallOutput {
-        name: None,
-        namespace: None,
+                    name: None,
+                    namespace: None,
                     id: None,
                     call_id: Some("observer-open".to_string()),
                     output: FunctionCallOutputPayload {
@@ -7397,7 +7433,13 @@ async fn spine_observer_publishes_after_install_even_when_memory_projection_fail
     })
     .await??;
     assert!(matches!(tree.msg, EventMsg::SpineTreeUpdate(_)));
-    let history = serde_json::to_string(&session.clone_history().await.raw_items().collect::<Vec<_>>())?;
+    let history = serde_json::to_string(
+        &session
+            .clone_history()
+            .await
+            .raw_items()
+            .collect::<Vec<_>>(),
+    )?;
     assert!(
         history.contains("observer scope"),
         "installed history: {history}"
@@ -9487,7 +9529,13 @@ where
     };
 
     let session = Arc::new(Session {
-        spine: crate::spine::coordinator::SpineSessionAdapter::from_configuration_with_observer(/*enabled*/ false, thread_id.to_string(), spine_core::host::SpineConfig::default(), Default::default()).expect("disabled test Spine"),
+        spine: crate::spine::coordinator::SpineSessionAdapter::from_configuration_with_observer(
+            /*enabled*/ false,
+            thread_id.to_string(),
+            spine_core::host::SpineConfig::default(),
+            Default::default(),
+        )
+        .expect("disabled test Spine"),
         spine_spawn_lifecycle: Default::default(),
         thread_id,
         installation_id: "11111111-1111-4111-8111-111111111111".to_string(),

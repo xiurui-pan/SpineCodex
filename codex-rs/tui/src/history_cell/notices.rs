@@ -1,7 +1,8 @@
 //! Informational, warning, update, and policy notice history cells.
 
 use super::*;
-use codex_install_context::distribution::{GITHUB_LATEST_RELEASE_URL, GITHUB_REPOSITORY_URL};
+use codex_install_context::distribution::GITHUB_LATEST_RELEASE_URL;
+use codex_install_context::distribution::GITHUB_REPOSITORY_URL;
 
 #[cfg_attr(not(test), allow(dead_code))]
 const RECAP_HEADING: &str = "Conversation recap";
@@ -47,9 +48,7 @@ impl HistoryCell for UpdateAvailableHistoryCell {
             update_instruction,
             "",
             "See full release notes:",
-            GITHUB_LATEST_RELEASE_URL
-                .cyan()
-                .underlined(),
+            GITHUB_LATEST_RELEASE_URL.cyan().underlined(),
         ];
 
         let inner_width = content

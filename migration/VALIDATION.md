@@ -120,3 +120,10 @@ P0-P6 source adaptations are present; package validation is in progress. No migr
 
 - The focused final selection ran 511 tests: 510 passed and one remaining apex-domain test failed only because `openai.com` still resolved to a Fake-IP. After adding its independently resolved public address to the namespace-only hosts file, that test passed (1/1). The boxed configuration TUI regression, real v1 replay, both removed/malformed-source cases, media annotations, config snapshots, TLS tests and V8 sandbox check all passed. Evidence: `review-final.log/.xml`, `network-final.log`.
 - Rechecking shell snapshots in the final clean namespace ran 27 tests: 24 passed and the same three remote baseline cases failed (`shell-clean.log`). Their exec-server implementation is unchanged from the fixed upstream target. These remain recorded upstream failures, not acceptance passes.
+
+
+## Final source preparation
+
+- Scoped `just fix` completed successfully (9m 10s). It fixed unused imports, redundant clones and error propagation. The remaining assertion, async-guard, enum-size and rendering-style warnings are retained in `final-lint-format.log`; this is not a claim of a warning-free `-D warnings` Clippy run. The duplicate TUI debug-test registration and redundant struct update were removed without changing test bodies or product behavior.
+- `just fmt` completed for Rust, Just, Bazel/Starlark, Python scripts and Python SDK. PyPI CDN TLS failed from WSL; the two exact Ruff wheels (0.15.12 and 0.15.13) were fetched from the Tsinghua mirror, verified against their checked-in uv.lock SHA-256 values, and installed into the formatter environments before running with dependency synchronization disabled. No dependency pins or source indexes were changed.
+- No local unit/integration suite was rerun after fix/format, as required by AGENTS.md. Final delivery still requires the new native-package CI run and installation smoke.

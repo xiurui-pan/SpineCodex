@@ -1,10 +1,10 @@
-use codex_history::ResponseItemEnvelope;
 use super::coordinator::ReplayMode;
 use super::coordinator::SharedSpineCoordinator;
 use super::coordinator::replay_mode;
 use super::coordinator::with_shared_coordinator;
 use super::session_config::SpineSessionConfig;
 use crate::context_manager::ContextManager;
+use codex_history::ResponseItemEnvelope;
 use codex_history::RolloutItem;
 use codex_protocol::protocol::TokenCountEvent;
 
@@ -24,7 +24,10 @@ impl SessionSpineRuntime {
         })
     }
 
-    pub(crate) fn append_response_items(&mut self, items: &[ResponseItemEnvelope]) -> Result<(), String> {
+    pub(crate) fn append_response_items(
+        &mut self,
+        items: &[ResponseItemEnvelope],
+    ) -> Result<(), String> {
         let result = with_shared_coordinator(&self.coordinator, |coordinator| {
             coordinator.observe_response_items(items)
         });
@@ -60,7 +63,9 @@ impl SessionSpineRuntime {
     ) -> Result<super::coordinator::PreparedCanonicalCompact, String> {
         with_shared_coordinator(&self.coordinator, |coordinator| {
             coordinator.prepare_compact(replacement_items)
-        }).expect("enabled Spine runtime owns a coordinator").map_err(|error| error.to_string())
+        })
+        .expect("enabled Spine runtime owns a coordinator")
+        .map_err(|error| error.to_string())
     }
 
     pub(crate) fn install_compact(
@@ -70,8 +75,10 @@ impl SessionSpineRuntime {
     ) {
         with_shared_coordinator(&self.coordinator, |coordinator| {
             coordinator.install_compact(prepared);
-        }).expect("enabled Spine runtime owns a coordinator");
-        self.model_context.replace_annotated(replacement_items.to_vec());
+        })
+        .expect("enabled Spine runtime owns a coordinator");
+        self.model_context
+            .replace_annotated(replacement_items.to_vec());
     }
 
     pub(crate) fn publish_canonical_compact(&mut self) {

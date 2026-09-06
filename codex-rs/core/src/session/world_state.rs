@@ -55,7 +55,11 @@ impl Session {
         } else {
             model_instructions
         };
-        let model_instructions = turn_context.config.spine.sdk().extend_system_prompt(&model_instructions);
+        let model_instructions = turn_context
+            .config
+            .spine
+            .sdk()
+            .extend_system_prompt(&model_instructions);
         let base_instructions = self.get_prompt_base_instructions().await.text;
         let (previous_model, previous_context, base_instructions) = {
             let state = self.state.lock().await;

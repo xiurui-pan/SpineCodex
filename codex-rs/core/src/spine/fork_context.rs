@@ -8,7 +8,9 @@ impl Session {
         transformed: &[RolloutItem],
     ) -> Vec<RolloutItem> {
         let turn = self.new_default_turn().await;
-        let reconstruction = self.reconstruct_history_from_rollout(&turn, transformed).await;
+        let reconstruction = self
+            .reconstruct_history_from_rollout(&turn, transformed)
+            .await;
         let (window_number, window_ids) = self.next_auto_compact_window().await;
         let guardian_history = self.clone_history().await.guardian_history_checkpoint();
         let mut history = prefix.to_vec();
@@ -25,7 +27,9 @@ impl Session {
             latest_token_usage_record: None,
         }));
         if let Some(snapshot) = reconstruction.world_state_baseline {
-            history.push(RolloutItem::WorldState(WorldStateItem::full(snapshot.into_object())));
+            history.push(RolloutItem::WorldState(WorldStateItem::full(
+                snapshot.into_object(),
+            )));
         }
         if let Some(context) = reconstruction.reference_context_item {
             history.push(RolloutItem::TurnContext(context));

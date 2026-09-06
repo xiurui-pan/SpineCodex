@@ -449,7 +449,8 @@ impl ToolCallRuntime {
         let supports_parallel = router.tool_supports_parallel(&call);
         let tool_runtime = router.tool_runtime(&call.tool_name);
         let waits_for_runtime_cancellation = tool_runtime
-            .as_ref().is_some_and(|runtime| runtime.waits_for_runtime_cancellation());
+            .as_ref()
+            .is_some_and(|runtime| runtime.waits_for_runtime_cancellation());
         let router = Arc::clone(router);
         let session = Arc::clone(&self.session);
         let step_context = Arc::clone(&self.step_context);

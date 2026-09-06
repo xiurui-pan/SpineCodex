@@ -215,7 +215,10 @@ impl Session {
         Ok(())
     }
 
-    pub(crate) async fn persist_spine_rollout_items(&self, items: &[RolloutItem]) -> anyhow::Result<()> {
+    pub(crate) async fn persist_spine_rollout_items(
+        &self,
+        items: &[RolloutItem],
+    ) -> anyhow::Result<()> {
         let Some(live_thread) = self.live_thread() else {
             return Ok(());
         };

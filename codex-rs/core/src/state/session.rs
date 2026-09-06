@@ -18,12 +18,12 @@ use crate::session::PreviousTurnSettings;
 use crate::session::session::SessionConfiguration;
 use crate::session::time_reminder::CurrentTimeReminderState;
 use crate::session_startup_prewarm::SessionStartupPrewarmHandle;
-use codex_history::ResponseItemEnvelope;
-use codex_protocol::SessionId;
-use codex_protocol::ThreadId;
 use crate::spine::coordinator::SharedSpineCoordinator;
 use crate::spine::session_config::SpineSessionConfig;
 use crate::spine::session_runtime::SessionSpineRuntime;
+use codex_history::ResponseItemEnvelope;
+use codex_protocol::SessionId;
+use codex_protocol::ThreadId;
 use codex_protocol::protocol::RateLimitSnapshot;
 use codex_protocol::protocol::TokenUsage;
 use codex_protocol::protocol::TokenUsageInfo;
@@ -179,7 +179,10 @@ impl SessionState {
         &self,
         replacement_items: &[ResponseItemEnvelope],
     ) -> Result<Option<crate::spine::coordinator::PreparedCanonicalCompact>, String> {
-        self.spine_runtime.as_ref().map(|spine| spine.prepare_compact(replacement_items)).transpose()
+        self.spine_runtime
+            .as_ref()
+            .map(|spine| spine.prepare_compact(replacement_items))
+            .transpose()
     }
 
     pub(crate) fn install_spine_compact(
@@ -187,7 +190,9 @@ impl SessionState {
         prepared: crate::spine::coordinator::PreparedCanonicalCompact,
         replacement_items: &[ResponseItemEnvelope],
     ) {
-        self.spine_runtime.as_mut().expect("prepared compact requires an enabled Spine runtime")
+        self.spine_runtime
+            .as_mut()
+            .expect("prepared compact requires an enabled Spine runtime")
             .install_compact(prepared, replacement_items);
     }
 

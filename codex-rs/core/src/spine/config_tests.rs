@@ -81,7 +81,13 @@ fn explicit_configuration_is_required_even_for_untrusted_workspace() {
     )
     .unwrap_err();
 
-    assert_eq!(error.downcast_ref::<io::Error>().expect("filesystem error").kind(), std::io::ErrorKind::NotFound);
+    assert_eq!(
+        error
+            .downcast_ref::<io::Error>()
+            .expect("filesystem error")
+            .kind(),
+        std::io::ErrorKind::NotFound
+    );
 }
 
 #[test]
@@ -112,10 +118,20 @@ fn managed_host_features_select_sdk_features() {
 }
 
 fn load(
-    path: Option<&AbsolutePathBuf>, snapshot: Option<&SpineConfigLockToml>, working_directory: &Path,
-    home_directory: Option<&Path>, features: &ManagedFeatures, project_config_trusted: bool,
+    path: Option<&AbsolutePathBuf>,
+    snapshot: Option<&SpineConfigLockToml>,
+    working_directory: &Path,
+    home_directory: Option<&Path>,
+    features: &ManagedFeatures,
+    project_config_trusted: bool,
 ) -> anyhow::Result<(SpineConfig, ToolCatalog)> {
-    let resolved = SpineConfiguration::pending(path, snapshot, working_directory, home_directory, project_config_trusted)
-        .resolve(/*saved*/ None, features)?;
+    let resolved = SpineConfiguration::pending(
+        path,
+        snapshot,
+        working_directory,
+        home_directory,
+        project_config_trusted,
+    )
+    .resolve(/*saved*/ None, features)?;
     Ok((resolved.sdk().clone(), resolved.tools().clone()))
 }

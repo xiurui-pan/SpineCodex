@@ -150,7 +150,9 @@ impl From<RolloutItemWire<'_>> for RolloutItem {
             RolloutItemWire::SpineSamplingStarted { payload } => {
                 Self::SpineSamplingStarted(payload.into_owned())
             }
-            RolloutItemWire::SpineTransition { payload } => Self::SpineTransition(payload.into_owned()),
+            RolloutItemWire::SpineTransition { payload } => {
+                Self::SpineTransition(payload.into_owned())
+            }
         }
     }
 }

@@ -38,22 +38,37 @@ impl SpineConfiguration {
         home_directory: Option<&Path>,
         project_config_trusted: bool,
     ) -> Self {
-        Self { state: match snapshot {
-            Some(snapshot) => ConfigurationState::Snapshot(snapshot.clone()),
-            None => ConfigurationState::Sources(loader(path, working_directory, home_directory, project_config_trusted)),
-        } }
+        Self {
+            state: match snapshot {
+                Some(snapshot) => ConfigurationState::Snapshot(snapshot.clone()),
+                None => ConfigurationState::Sources(loader(
+                    path,
+                    working_directory,
+                    home_directory,
+                    project_config_trusted,
+                )),
+            },
+        }
     }
 
     /// Creates an already resolved SDK configuration for an embedding host.
     pub fn from_sdk(sdk: SpineConfig) -> anyhow::Result<Self> {
         let snapshot = SpineConfigLockToml {
             schema_version: sdk.schema_version(),
-            bundled_digest: RecordDigest::digest(spine_core::host::DEFAULT_CONFIG_TOML.as_bytes()).as_str().to_string(),
+            bundled_digest: RecordDigest::digest(spine_core::host::DEFAULT_CONFIG_TOML.as_bytes())
+                .as_str()
+                .to_string(),
             sources: Vec::new(),
             effective_config: Some(sdk.snapshot_toml()?),
         };
         let tools = ToolCatalog::new(&sdk)?;
-        Ok(Self { state: ConfigurationState::Resolved(Box::new(ResolvedConfiguration { sdk, tools, snapshot })) })
+        Ok(Self {
+            state: ConfigurationState::Resolved(Box::new(ResolvedConfiguration {
+                sdk,
+                tools,
+                snapshot,
+            })),
+        })
     }
 
     /// Returns the SDK after the session initialization boundary has resolved it.
@@ -61,7 +76,9 @@ impl SpineConfiguration {
         match &self.state {
             ConfigurationState::Resolved(resolved) => &resolved.sdk,
             ConfigurationState::Sources(_) | ConfigurationState::Snapshot(_) => {
-                panic!("session initialization must resolve Spine configuration before using the SDK")
+                panic!(
+                    "session initialization must resolve Spine configuration before using the SDK"
+                )
             }
         }
     }
@@ -80,28 +97,50 @@ impl SpineConfiguration {
         match &self.state {
             ConfigurationState::Resolved(resolved) => &resolved.snapshot,
             ConfigurationState::Sources(_) | ConfigurationState::Snapshot(_) => {
-                panic!("session initialization must resolve Spine configuration before exporting it")
+                panic!(
+                    "session initialization must resolve Spine configuration before exporting it"
+                )
             }
         }
     }
 
-    pub(crate) fn resolve(&self, saved: Option<&str>, features: &ManagedFeatures) -> anyhow::Result<Self> {
+    pub(crate) fn resolve(
+        &self,
+        saved: Option<&str>,
+        features: &ManagedFeatures,
+    ) -> anyhow::Result<Self> {
         let snapshot = match saved {
-            Some(saved) => Self::from_sdk(SpineConfig::parse_toml(saved)?)?.snapshot().clone(),
+            Some(saved) => Self::from_sdk(SpineConfig::parse_toml(saved)?)?
+                .snapshot()
+                .clone(),
             None => match &self.state {
                 ConfigurationState::Sources(loader) => lock_snapshot(loader.clone())?,
                 ConfigurationState::Snapshot(snapshot) => snapshot.clone(),
                 ConfigurationState::Resolved(resolved) => resolved.snapshot.clone(),
             },
         };
-        let effective = snapshot.effective_config.as_deref()
-            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "Spine snapshot is missing effective config"))?;
-        let enabled = [(CodexFeature::SpineJit, spine_core::host::Feature::Jit),
-            (CodexFeature::SpineSpawn, spine_core::host::Feature::Spawn)]
-            .into_iter().filter(|(host, _)| features.enabled(*host)).map(|(_, sdk)| sdk);
+        let effective = snapshot.effective_config.as_deref().ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "Spine snapshot is missing effective config",
+            )
+        })?;
+        let enabled = [
+            (CodexFeature::SpineJit, spine_core::host::Feature::Jit),
+            (CodexFeature::SpineSpawn, spine_core::host::Feature::Spawn),
+        ]
+        .into_iter()
+        .filter(|(host, _)| features.enabled(*host))
+        .map(|(_, sdk)| sdk);
         let sdk = SpineConfig::parse_toml(effective)?.with_features(enabled)?;
         let tools = ToolCatalog::new(&sdk)?;
-        Ok(Self { state: ConfigurationState::Resolved(Box::new(ResolvedConfiguration { sdk, tools, snapshot })) })
+        Ok(Self {
+            state: ConfigurationState::Resolved(Box::new(ResolvedConfiguration {
+                sdk,
+                tools,
+                snapshot,
+            })),
+        })
     }
 }
 
@@ -153,7 +192,13 @@ fn lock_snapshot(loader: SpineConfigLoader) -> io::Result<SpineConfigLockToml> {
             .as_str()
             .to_string(),
         sources,
-        effective_config: Some(loader.load().map_err(io::Error::from)?.snapshot_toml().map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?),
+        effective_config: Some(
+            loader
+                .load()
+                .map_err(io::Error::from)?
+                .snapshot_toml()
+                .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?,
+        ),
     })
 }
 

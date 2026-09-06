@@ -2,14 +2,14 @@ use std::fs;
 use std::path::Path;
 use std::path::PathBuf;
 
-use codex_protocol::ThreadId;
-use codex_protocol::protocol::HistoryPosition;
 use codex_history::RolloutItem;
 use codex_history::RolloutLine;
-use codex_protocol::protocol::SessionMeta;
-use codex_protocol::protocol::SessionMetaLine;
 use codex_history::SpineSamplingStartedItem;
 use codex_history::SpineTransitionItem;
+use codex_protocol::ThreadId;
+use codex_protocol::protocol::HistoryPosition;
+use codex_protocol::protocol::SessionMeta;
+use codex_protocol::protocol::SessionMetaLine;
 use codex_protocol::protocol::ThreadHistoryMode;
 use pretty_assertions::assert_eq;
 use serde_json::json;
@@ -235,7 +235,7 @@ fn sampling_started(label: &str) -> RolloutItem {
     RolloutItem::SpineSamplingStarted(SpineSamplingStartedItem {
         sdk_config: None,
         replay_seed: None,
-                    version: 1,
+        version: 1,
         payload: json!({ "label": label }),
     })
 }

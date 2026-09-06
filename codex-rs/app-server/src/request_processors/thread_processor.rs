@@ -4421,10 +4421,14 @@ impl ThreadRequestProcessor {
         stored_thread: StoredThread,
     ) -> Result<(InitialHistory, StoredThread), JSONRPCErrorError> {
         if matches!(stored_thread.history_mode, ThreadHistoryMode::Paginated) {
-            let model_context = self.thread_store.load_latest_model_context(StoreLoadThreadHistoryParams {
-                thread_id: stored_thread.thread_id,
-                include_archived: true,
-            }).await.map_err(thread_store_resume_read_error)?;
+            let model_context = self
+                .thread_store
+                .load_latest_model_context(StoreLoadThreadHistoryParams {
+                    thread_id: stored_thread.thread_id,
+                    include_archived: true,
+                })
+                .await
+                .map_err(thread_store_resume_read_error)?;
             let complete_history = self
                 .thread_store
                 .load_complete_history(StoreLoadThreadHistoryParams {

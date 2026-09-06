@@ -39,12 +39,23 @@ impl CodexSpineCoordinator {
             || boundary.0.saturating_add(1),
             |boundary| boundary.0.saturating_add(1),
         );
-        let source_items = runtime.source_snapshot().cells().iter()
+        let source_items = runtime
+            .source_snapshot()
+            .cells()
+            .iter()
             .map(|cell| cell.id.clone())
             .zip(replacement_items.iter().cloned())
             .collect();
-        Ok(PreparedCanonicalCompact { runtime, next_boundary, source_items, barrier,
-            replacement: replacement_items.iter().cloned().map(RolloutItem::ResponseItem).collect(),
+        Ok(PreparedCanonicalCompact {
+            runtime,
+            next_boundary,
+            source_items,
+            barrier,
+            replacement: replacement_items
+                .iter()
+                .cloned()
+                .map(RolloutItem::ResponseItem)
+                .collect(),
         })
     }
 

@@ -1289,11 +1289,13 @@ pub(crate) async fn apply_bespoke_event_handling(
                 apply_live_model_settings(&mut response.thread, &config_snapshot);
                 outgoing.send_response(request_id, response).await;
             }
-            outgoing.send_server_notification(ServerNotification::ThreadRolledBack(
-                ThreadRolledBackNotification {
-                    thread_id: conversation_id.to_string(),
-                },
-            )).await;
+            outgoing
+                .send_server_notification(ServerNotification::ThreadRolledBack(
+                    ThreadRolledBackNotification {
+                        thread_id: conversation_id.to_string(),
+                    },
+                ))
+                .await;
         }
         EventMsg::ThreadGoalUpdated(thread_goal_event) => {
             let notification = ThreadGoalUpdatedNotification {

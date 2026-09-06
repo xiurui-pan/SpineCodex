@@ -130,7 +130,10 @@ fn user_anchor_is_a_separate_bounded_item_before_an_unchanged_base_source() {
     assert!(
         spine_model_item_wire_bytes(&prepared.items[0]).unwrap() <= MAX_SPINE_MODEL_ITEM_WIRE_BYTES
     );
-    assert_eq!(prepared.items[1], codex_history::ResponseItemEnvelope::new(source_item));
+    assert_eq!(
+        prepared.items[1],
+        codex_history::ResponseItemEnvelope::new(source_item)
+    );
     assert!(
         spine_model_item_wire_bytes(&prepared.items[1]).unwrap() > MAX_SPINE_MODEL_ITEM_WIRE_BYTES
     );
@@ -181,7 +184,10 @@ fn canonical_context_preserves_oversized_native_tool_output() {
     )
     .expect("native tool output must remain Base-owned source");
 
-    assert_eq!(prepared.items, vec![codex_history::ResponseItemEnvelope::new(item)]);
+    assert_eq!(
+        prepared.items,
+        vec![codex_history::ResponseItemEnvelope::new(item)]
+    );
     assert!(
         spine_model_item_wire_bytes(&prepared.items[0]).unwrap() > MAX_SPINE_MODEL_ITEM_WIRE_BYTES
     );

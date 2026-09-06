@@ -278,7 +278,10 @@ async fn cold_resume_replaces_legacy_attribution_without_duplication(
     let request_id = app_server
         .send_thread_start_request(ThreadStartParams {
             // Produce an actual native legacy rollout before rewriting its legacy fragment.
-            config: Some(std::collections::HashMap::from([("features.spine_jit".to_string(), json!(false))])),
+            config: Some(std::collections::HashMap::from([(
+                "features.spine_jit".to_string(),
+                json!(false),
+            )])),
             ..Default::default()
         })
         .await?;

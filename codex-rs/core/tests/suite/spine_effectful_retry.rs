@@ -7,10 +7,10 @@ use std::time::Duration;
 
 use anyhow::Context;
 use anyhow::Result;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::Op;
 use codex_history::RolloutItem;
 use codex_history::RolloutLine;
+use codex_protocol::protocol::EventMsg;
+use codex_protocol::protocol::Op;
 use codex_protocol::user_input::UserInput;
 use core_test_support::responses;
 use core_test_support::streaming_sse::StreamingSseChunk;
@@ -135,10 +135,13 @@ async fn interrupt_after_spine_effect_commits_cancelled_attempt_once() -> Result
     let test = spine_test_codex().build_with_auto_env(&server).await?;
 
     test.codex
-        .start_or_steer_turn(codex_protocol::turn_input::TurnInputRequest::user_input(vec![UserInput::Text {
+        .start_or_steer_turn(
+            codex_protocol::turn_input::TurnInputRequest::user_input(vec![UserInput::Text {
                 text: "commit the Spine effect before interrupting".to_string(),
                 text_elements: Vec::new(),
-            }]).with_thread_settings(Default::default()))
+            }])
+            .with_thread_settings(Default::default()),
+        )
         .await?;
     wait_for_event(&test.codex, |event| {
         matches!(

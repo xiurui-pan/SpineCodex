@@ -1,4 +1,3 @@
-use codex_history::ResponseItemEnvelope;
 use super::context_handler::response_item_to_char_and_source;
 use super::context_plan::CodexContextPlanError;
 use super::context_plan::PreparedCodexContextPlan;
@@ -6,9 +5,10 @@ use super::context_plan::prepare_codex_context_plan;
 use super::memory_projection::SpinetreeUserMessageProjectionEntry;
 use super::observer::CodexSpineObserverHandler;
 use crate::session::session::Session;
-use codex_protocol::models::ResponseItem;
+use codex_history::ResponseItemEnvelope;
 use codex_history::RolloutItem;
 use codex_history::SpineTransitionItem;
+use codex_protocol::models::ResponseItem;
 use spine_core::host::CanonicalReplay;
 use spine_core::host::ContextEpoch;
 use spine_core::host::ContextWindowSample;
@@ -38,9 +38,9 @@ mod session;
 
 pub(crate) use archive::CoordinatorError;
 pub(crate) use archive::ReplayMode;
+use archive::ReplaySeedItem;
 pub(crate) use archive::decode_spine_rollout_item;
 use archive::encode_spine_sampling_started;
-use archive::ReplaySeedItem;
 use archive::encode_spine_transition;
 pub(crate) use archive::replay_mode;
 pub(crate) use session::SpineSessionAdapter;
@@ -134,7 +134,10 @@ impl CodexSpineCoordinator {
             self.next_boundary = self.next_boundary.saturating_add(1);
             let (character, projected) = response_item_to_char_and_source(item, boundary);
             if let Some(seed) = &mut self.replay_seed {
-                seed.push(ReplaySeedItem::Source { boundary: boundary.0, item: RolloutItem::ResponseItem(item.clone()) });
+                seed.push(ReplaySeedItem::Source {
+                    boundary: boundary.0,
+                    item: RolloutItem::ResponseItem(item.clone()),
+                });
             }
             characters.push(character);
             projected_items.push(projected);
@@ -190,11 +193,16 @@ impl CodexSpineCoordinator {
             .runtime
             .sampling_started_record(attempt, RecordDigest::digest(&encoded))?;
         let mut started = encode_spine_sampling_started(&record)?;
-        started.sdk_config = Some(self.runtime_config.snapshot_toml()
-            .map_err(|error| CoordinatorError::Codec(error.to_string()))?);
+        started.sdk_config = Some(
+            self.runtime_config
+                .snapshot_toml()
+                .map_err(|error| CoordinatorError::Codec(error.to_string()))?,
+        );
         if let Some(seed) = self.replay_seed.take() {
-            started.replay_seed = Some(serde_json::to_value(seed)
-                .map_err(|error| CoordinatorError::Codec(error.to_string()))?);
+            started.replay_seed = Some(
+                serde_json::to_value(seed)
+                    .map_err(|error| CoordinatorError::Codec(error.to_string()))?,
+            );
         }
         Ok(started)
     }
@@ -263,7 +271,9 @@ impl CodexSpineCoordinator {
 
     #[cfg(test)]
     pub(crate) fn current_input_tokens(&self) -> Option<i64> {
-        self.runtime.current_input_tokens().and_then(|tokens| i64::try_from(tokens).ok())
+        self.runtime
+            .current_input_tokens()
+            .and_then(|tokens| i64::try_from(tokens).ok())
     }
 
     #[cfg(test)]

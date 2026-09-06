@@ -26,10 +26,13 @@ async fn wait_for_turn_complete(codex: &codex_core::CodexThread) {
 
 async fn submit_text(codex: &codex_core::CodexThread, text: &str) -> Result<()> {
     codex
-        .start_or_steer_turn(codex_protocol::turn_input::TurnInputRequest::user_input(vec![UserInput::Text {
+        .start_or_steer_turn(
+            codex_protocol::turn_input::TurnInputRequest::user_input(vec![UserInput::Text {
                 text: text.to_string(),
                 text_elements: Vec::new(),
-            }]).with_thread_settings(Default::default()))
+            }])
+            .with_thread_settings(Default::default()),
+        )
         .await?;
     wait_for_turn_complete(codex).await;
     Ok(())

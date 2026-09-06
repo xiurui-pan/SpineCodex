@@ -193,14 +193,13 @@ fn load_complete_history_from_lineage_blocking(
 ) -> ThreadStoreResult<Vec<RolloutItem>> {
     let mut items = vec![RolloutItem::SessionMeta(session_meta)];
     for segment in lineage.segments() {
-        let file = codex_rollout::open_rollout_seekable_reader(segment.rollout_path.as_path()).map_err(|err| {
-            ThreadStoreError::Internal {
+        let file = codex_rollout::open_rollout_seekable_reader(segment.rollout_path.as_path())
+            .map_err(|err| ThreadStoreError::Internal {
                 message: format!(
                     "failed to open complete lineage {}: {err}",
                     segment.rollout_path.display()
                 ),
-            }
-        })?;
+            })?;
         let end_byte_offset = match segment.end {
             Some(end) => end.end_byte_offset,
             None => file

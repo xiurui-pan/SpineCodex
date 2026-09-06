@@ -2,8 +2,8 @@ use std::time::Duration;
 
 use codex_protocol::AgentPath;
 use codex_protocol::ThreadId;
-use codex_protocol::turn_input::TurnStartOptions;
 use codex_protocol::error::Result as CodexResult;
+use codex_protocol::turn_input::TurnStartOptions;
 use codex_protocol::user_input::UserInput;
 
 use super::AgentControl;
@@ -38,9 +38,7 @@ impl AgentControl {
                 return Err(error);
             }
         };
-        let result = self
-            .send_input(thread_id, input, start_options)
-            .await;
+        let result = self.send_input(thread_id, input, start_options).await;
         if result.is_err() {
             self.release_execution_reservation(agent_path);
         }

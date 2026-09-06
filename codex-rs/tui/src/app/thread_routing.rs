@@ -9,8 +9,8 @@ use super::*;
 use crate::app_event::ThreadTitleDestination;
 use crate::chatwidget::ThreadInputStateRestoreMode;
 use crate::session_resume::read_session_model;
-use codex_app_server_protocol::ThreadStartedNotification;
 use codex_app_server_protocol::CollabAgentStatus;
+use codex_app_server_protocol::ThreadStartedNotification;
 use codex_app_server_protocol::ThreadStatus;
 use codex_app_server_protocol::TurnInterruptParams;
 use codex_app_server_protocol::TurnInterruptResponse;
@@ -1141,7 +1141,8 @@ impl App {
                 // even while the UI projection event is still queued.
                 for task in &notification.tasks {
                     if let Ok(child_thread_id) = ThreadId::from_string(&task.thread_id) {
-                        self.agent_navigation.record_spawn_parent(child_thread_id, thread_id);
+                        self.agent_navigation
+                            .record_spawn_parent(child_thread_id, thread_id);
                     }
                 }
                 Some(AppEvent::UpsertSpineSpawnProgressCell {

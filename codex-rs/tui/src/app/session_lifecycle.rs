@@ -76,7 +76,8 @@ impl App {
             .into_iter()
             .filter(|(thread_id, _)| {
                 !self.spine_tree_views.values().any(|view| {
-                    view.spawn_summary_for_child_thread(&thread_id.to_string()).is_some()
+                    view.spawn_summary_for_child_thread(&thread_id.to_string())
+                        .is_some()
                 })
             })
             .collect::<Vec<_>>();

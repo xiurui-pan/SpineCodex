@@ -1,9 +1,9 @@
 use anyhow::Context;
-use codex_config::spine_snapshot::ConfigLockfileToml;
 use codex_config::config_toml::ConfigToml;
 use codex_config::config_toml::OrchestratorFeatureToml;
 use codex_config::config_toml::OrchestratorToml;
 use codex_config::config_toml::SpineSpawnConfigToml;
+use codex_config::spine_snapshot::ConfigLockfileToml;
 use codex_config::types::MemoriesToml;
 use codex_features::CurrentTimeReminderConfigToml;
 use codex_features::Feature;
@@ -130,22 +130,35 @@ fn save_config_resolved_fields(
     let features = lock_config
         .features
         .get_or_insert_with(FeaturesToml::default);
-    let mut feature_values = toml::Value::try_from(&*features)
-        .context("serialize snapshot feature settings")?;
-    let feature_table = feature_values.as_table_mut().expect("features serialize to a table");
+    let mut feature_values =
+        toml::Value::try_from(&*features).context("serialize snapshot feature settings")?;
+    let toml::Value::Table(feature_table) = &mut feature_values else {
+        unreachable!("FeaturesToml serializes as a TOML table");
+    };
     feature_table.remove("apps_mcp_path_override");
-    for spec in codex_features::FEATURES.iter().filter(|spec| spec.stage != codex_features::Stage::Removed) {
+    for spec in codex_features::FEATURES
+        .iter()
+        .filter(|spec| spec.stage != codex_features::Stage::Removed)
+    {
         let enabled = toml::Value::Boolean(config.features.enabled(spec.id));
         match feature_table.get_mut(spec.key) {
-            Some(toml::Value::Table(settings)) => { settings.insert("enabled".to_string(), enabled); }
-            _ => { feature_table.insert(spec.key.to_string(), enabled); }
+            Some(toml::Value::Table(settings)) => {
+                settings.insert("enabled".to_string(), enabled);
+            }
+            _ => {
+                feature_table.insert(spec.key.to_string(), enabled);
+            }
         }
     }
-    *features = feature_values.try_into().context("deserialize snapshot feature settings")?;
+    *features = feature_values
+        .try_into()
+        .context("deserialize snapshot feature settings")?;
     if config.tool_registry.error_on_tool_collisions || features.tool_registry.is_some() {
         features.tool_registry = Some(ToolRegistryConfigToml {
             error_on_tool_collisions: Some(config.tool_registry.error_on_tool_collisions),
-            turn_metadata_includes_tool_info: Some(config.tool_registry.turn_metadata_includes_tool_info),
+            turn_metadata_includes_tool_info: Some(
+                config.tool_registry.turn_metadata_includes_tool_info,
+            ),
         });
     }
     let mut multi_agent_v2: MultiAgentV2ConfigToml =

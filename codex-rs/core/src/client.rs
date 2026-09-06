@@ -2056,7 +2056,7 @@ impl ModelClientSession {
                             /*warmup*/ false,
                             request_trace,
                             inference_trace,
-                                    )
+                        )
                         .await?
                     {
                         WebsocketStreamOutcome::Stream(stream) => return Ok(stream),
@@ -2075,7 +2075,7 @@ impl ModelClientSession {
                     service_tier,
                     responses_metadata,
                     inference_trace,
-                    )
+                )
                 .await
             }
         }

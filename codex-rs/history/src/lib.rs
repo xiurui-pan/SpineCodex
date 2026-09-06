@@ -259,8 +259,13 @@ impl InitialHistory {
     /// Complete source evidence for Spine replay, independent of native hydration metadata.
     pub fn get_spine_rollout_items(&self) -> &[RolloutItem] {
         match self {
-            Self::Resumed(ResumedHistory { spine_history: Some(history), .. }) => history,
-            Self::New | Self::Cleared | Self::Resumed(_) | Self::Forked(_) => self.get_rollout_items(),
+            Self::Resumed(ResumedHistory {
+                spine_history: Some(history),
+                ..
+            }) => history,
+            Self::New | Self::Cleared | Self::Resumed(_) | Self::Forked(_) => {
+                self.get_rollout_items()
+            }
         }
     }
 

@@ -57,7 +57,7 @@ class SpineReleaseWorkflowTest(unittest.TestCase):
         self.assertIn(release_url, readme)
         self.assertIn(package["name"], workflow)
         self.assertIn(product_bin, workflow)
-        self.assertIn('name: spine-release', workflow)
+        self.assertIn("name: spine-release", workflow)
         self.assertIn('- "v*.*.*"', workflow)
         workspace_version = re.search(
             r"(?ms)^\[workspace\.package\]\s+version = \"([^\"]+)\"",
@@ -67,9 +67,11 @@ class SpineReleaseWorkflowTest(unittest.TestCase):
         self.assertIn(f'version = "{workspace_version.group(1)}"', cargo)
         release_notes = RELEASE_NOTES
         self.assertTrue(release_notes.is_file())
-        self.assertIn(workspace_version.group(1), release_notes.read_text(encoding="utf-8"))
+        self.assertIn(
+            workspace_version.group(1), release_notes.read_text(encoding="utf-8")
+        )
         metadata = re.search(
-            r'(?ms)^\[workspace\.metadata\.spinecodex\](.*?)(?=^\[|\Z)',
+            r"(?ms)^\[workspace\.metadata\.spinecodex\](.*?)(?=^\[|\Z)",
             cargo,
         )
         self.assertIsNotNone(metadata)
@@ -125,14 +127,16 @@ class SpineReleaseWorkflowTest(unittest.TestCase):
 
         self.assertEqual(matrix_targets(text), NATIVE_TARGETS)
         self.assertIn('pkg.name !== "@spinejit/spine-codex"', text)
-        self.assertIn('Object.keys(pkg.bin).length !== 1', text)
+        self.assertIn("Object.keys(pkg.bin).length !== 1", text)
         self.assertIn("const expectedDependencies = Object.fromEntries(", text)
-        self.assertIn('pkg.version !== `${process.env.VERSION}-${process.env.PLATFORM}`', text)
+        self.assertIn(
+            "pkg.version !== `${process.env.VERSION}-${process.env.PLATFORM}`", text
+        )
         self.assertIn('"${payload_targets[0]}" != "$target"', text)
         self.assertIn("Create GitHub Release", text)
         self.assertIn("Verify GitHub latest and npm latest converge", text)
-        self.assertIn('npm_tag=alpha', text)
-        self.assertIn('releases/tags/${TAG}', text)
+        self.assertIn("npm_tag=alpha", text)
+        self.assertIn("releases/tags/${TAG}", text)
         self.assertNotIn("publish-r2", text)
         self.assertNotIn("codesigning", text)
         self.assertNotIn("codex-runners", text)
@@ -146,9 +150,7 @@ class SpineReleaseWorkflowTest(unittest.TestCase):
 
     def test_staging_helper_resolves_the_product_workflow(self) -> None:
         text = STAGING_SCRIPT.read_text(encoding="utf-8")
-        self.assertIn(
-            'WORKFLOW_NAME = ".github/workflows/spine-release.yml"', text
-        )
+        self.assertIn('WORKFLOW_NAME = ".github/workflows/spine-release.yml"', text)
 
 
 if __name__ == "__main__":

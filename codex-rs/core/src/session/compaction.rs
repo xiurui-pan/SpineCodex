@@ -54,8 +54,11 @@ impl Session {
 
         // Keep readers on the previous window until its successor is durable.
         let mut state = self.state.lock().await;
-        let prepared = state.prepare_spine_compact(&items).map_err(anyhow::Error::msg)?;
-        self.persist_spine_rollout_items(&rollout_items).await
+        let prepared = state
+            .prepare_spine_compact(&items)
+            .map_err(anyhow::Error::msg)?;
+        self.persist_spine_rollout_items(&rollout_items)
+            .await
             .map_err(|error| self.latch_spine_error(error))?;
         if let Some(prepared) = prepared {
             state.install_spine_compact(prepared, &items);
@@ -73,5 +76,4 @@ impl Session {
         state.queue_pending_session_start_source(codex_hooks::SessionStartSource::Compact);
         Ok(())
     }
-
 }

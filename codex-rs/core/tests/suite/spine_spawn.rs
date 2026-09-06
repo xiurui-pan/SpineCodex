@@ -1,7 +1,8 @@
-use core_test_support::responses::ev_function_call;
 use anyhow::Context;
 use anyhow::Result;
 use codex_features::Feature;
+use codex_history::RolloutItem;
+use codex_history::RolloutLine;
 use codex_protocol::AgentPath;
 use codex_protocol::models::ResponseItem;
 use codex_protocol::openai_models::ReasoningEffort;
@@ -11,19 +12,18 @@ use codex_protocol::protocol::InterAgentCommunication;
 use codex_protocol::protocol::MULTI_AGENT_MODE_OPEN_TAG;
 use codex_protocol::protocol::MultiAgentVersion;
 use codex_protocol::protocol::Op;
-use codex_history::RolloutItem;
-use codex_history::RolloutLine;
 use codex_protocol::request_user_input::RequestUserInputAnswer;
 use codex_protocol::request_user_input::RequestUserInputResponse;
 use codex_protocol::user_input::UserInput;
 use core_test_support::responses::ResponseMock;
 use core_test_support::responses::ResponsesRequest;
+use core_test_support::responses::assert_parent_turn;
+use core_test_support::responses::assert_root_turn;
 use core_test_support::responses::ev_assistant_message;
 use core_test_support::responses::ev_completed;
+use core_test_support::responses::ev_function_call;
 use core_test_support::responses::ev_function_call_with_namespace;
 use core_test_support::responses::ev_reasoning_item;
-use core_test_support::responses::assert_root_turn;
-use core_test_support::responses::assert_parent_turn;
 use core_test_support::responses::ev_response_created;
 use core_test_support::responses::mount_response_once_match;
 use core_test_support::responses::mount_sse_once_match;
@@ -161,7 +161,11 @@ fn persisted_function_call_output(test: &TestCodex, call_id: &str) -> Result<Str
         .into_iter()
         .find_map(|line| match line.item {
             RolloutItem::ResponseItem(envelope) => match envelope.item {
-                ResponseItem::FunctionCallOutput {call_id: Some(output_call_id), output, ..} if output_call_id == call_id => output.body.to_text(),
+                ResponseItem::FunctionCallOutput {
+                    call_id: Some(output_call_id),
+                    output,
+                    ..
+                } if output_call_id == call_id => output.body.to_text(),
                 _ => None,
             },
             _ => None,
@@ -257,13 +261,18 @@ async fn capture_single_parent_request(
     .await;
     let test = builder.build(&server).await?;
     test.codex
-        .start_or_steer_turn(codex_protocol::turn_input::TurnInputRequest::user_input(vec![UserInput::Text {
+        .start_or_steer_turn(
+            codex_protocol::turn_input::TurnInputRequest::user_input(vec![UserInput::Text {
                 text: prompt.to_string(),
                 text_elements: Vec::new(),
-            }]).with_thread_settings(codex_protocol::protocol::ThreadSettingsOverrides {
-                effort: effort.map(Some),
-                ..Default::default()
-            }))
+            }])
+            .with_thread_settings(
+                codex_protocol::protocol::ThreadSettingsOverrides {
+                    effort: effort.map(Some),
+                    ..Default::default()
+                },
+            ),
+        )
         .await?;
     core_test_support::wait_for_event(&test.codex, |event| {
         matches!(event, EventMsg::TurnComplete(_))
@@ -334,10 +343,13 @@ async fn submit_turn_with_spawn_failure_action(
     answers: &[&str],
 ) -> Result<()> {
     test.codex
-        .start_or_steer_turn(codex_protocol::turn_input::TurnInputRequest::user_input(vec![UserInput::Text {
+        .start_or_steer_turn(
+            codex_protocol::turn_input::TurnInputRequest::user_input(vec![UserInput::Text {
                 text: prompt.to_string(),
                 text_elements: Vec::new(),
-            }]).with_thread_settings(Default::default()))
+            }])
+            .with_thread_settings(Default::default()),
+        )
         .await?;
     wait_for_event(&test.codex, |event| {
         matches!(event, EventMsg::TurnStarted(_))
@@ -966,9 +978,11 @@ async fn failed_child_continue_resumes_the_same_thread() -> Result<()> {
         "Continue must submit a new turn to the same failed child thread"
     );
     let root_turn_id = initial_body["client_metadata"]["root_turn_id"]
-        .as_str().expect("initial child root turn");
+        .as_str()
+        .expect("initial child root turn");
     let parent_turn_id = initial_body["client_metadata"]["parent_turn_id"]
-        .as_str().expect("initial child parent turn");
+        .as_str()
+        .expect("initial child parent turn");
     assert_root_turn(&continued_body, Some(root_turn_id))?;
     assert_parent_turn(&continued_body, Some(parent_turn_id))?;
     assert!(requests.iter().any(|request| {
@@ -1087,14 +1101,19 @@ async fn failed_child_retry_starts_a_fresh_branch() -> Result<()> {
         })
         .collect::<Vec<_>>();
     assert_ne!(retry_thread_ids[0], retry_thread_ids[1]);
-    let attempt_bodies = retry_requests.iter().map(|request| {
-        serde_json::from_slice::<Value>(&decoded_body(request).expect("attempt request body"))
-            .expect("attempt request JSON")
-    }).collect::<Vec<_>>();
+    let attempt_bodies = retry_requests
+        .iter()
+        .map(|request| {
+            serde_json::from_slice::<Value>(&decoded_body(request).expect("attempt request body"))
+                .expect("attempt request JSON")
+        })
+        .collect::<Vec<_>>();
     let root_turn_id = attempt_bodies[0]["client_metadata"]["root_turn_id"]
-        .as_str().expect("initial attempt root turn");
+        .as_str()
+        .expect("initial attempt root turn");
     let parent_turn_id = attempt_bodies[0]["client_metadata"]["parent_turn_id"]
-        .as_str().expect("initial attempt parent turn");
+        .as_str()
+        .expect("initial attempt parent turn");
     assert_root_turn(&attempt_bodies[1], Some(root_turn_id))?;
     assert_parent_turn(&attempt_bodies[1], Some(parent_turn_id))?;
     assert_eq!(
@@ -1175,10 +1194,13 @@ async fn failed_continue_returns_to_the_gate_for_the_remaining_failure() -> Resu
 
     let test = spine_builder().build(&server).await?;
     test.codex
-        .start_or_steer_turn(codex_protocol::turn_input::TurnInputRequest::user_input(vec![UserInput::Text {
+        .start_or_steer_turn(
+            codex_protocol::turn_input::TurnInputRequest::user_input(vec![UserInput::Text {
                 text: parent_prompt.to_string(),
                 text_elements: Vec::new(),
-            }]).with_thread_settings(Default::default()))
+            }])
+            .with_thread_settings(Default::default()),
+        )
         .await?;
     wait_for_event(&test.codex, |event| {
         matches!(event, EventMsg::TurnStarted(_))
@@ -1287,10 +1309,13 @@ async fn partial_failure_gate_waits_for_every_branch_to_settle() -> Result<()> {
 
     let test = spine_builder().build(&server).await?;
     test.codex
-        .start_or_steer_turn(codex_protocol::turn_input::TurnInputRequest::user_input(vec![UserInput::Text {
+        .start_or_steer_turn(
+            codex_protocol::turn_input::TurnInputRequest::user_input(vec![UserInput::Text {
                 text: parent_prompt.to_string(),
                 text_elements: Vec::new(),
-            }]).with_thread_settings(Default::default()))
+            }])
+            .with_thread_settings(Default::default()),
+        )
         .await?;
     wait_for_event(&test.codex, |event| {
         matches!(event, EventMsg::TurnStarted(_))
@@ -1393,10 +1418,13 @@ async fn interrupted_child_enters_the_failure_gate_without_interrupting_parent()
 
     let test = spine_builder().build(&server).await?;
     test.codex
-        .start_or_steer_turn(codex_protocol::turn_input::TurnInputRequest::user_input(vec![UserInput::Text {
+        .start_or_steer_turn(
+            codex_protocol::turn_input::TurnInputRequest::user_input(vec![UserInput::Text {
                 text: parent_prompt.to_string(),
                 text_elements: Vec::new(),
-            }]).with_thread_settings(Default::default()))
+            }])
+            .with_thread_settings(Default::default()),
+        )
         .await?;
     wait_for_event(&test.codex, |event| {
         matches!(event, EventMsg::TurnStarted(_))
@@ -1497,10 +1525,13 @@ async fn interrupting_the_failure_gate_tears_down_every_child() -> Result<()> {
 
     let test = spine_builder().build(&server).await?;
     test.codex
-        .start_or_steer_turn(codex_protocol::turn_input::TurnInputRequest::user_input(vec![UserInput::Text {
+        .start_or_steer_turn(
+            codex_protocol::turn_input::TurnInputRequest::user_input(vec![UserInput::Text {
                 text: parent_prompt.to_string(),
                 text_elements: Vec::new(),
-            }]).with_thread_settings(Default::default()))
+            }])
+            .with_thread_settings(Default::default()),
+        )
         .await?;
     wait_for_event(&test.codex, |event| {
         matches!(event, EventMsg::TurnStarted(_))
@@ -1573,10 +1604,13 @@ async fn all_failed_children_share_one_abandon_gate() -> Result<()> {
 
     let test = spine_builder().build(&server).await?;
     test.codex
-        .start_or_steer_turn(codex_protocol::turn_input::TurnInputRequest::user_input(vec![UserInput::Text {
+        .start_or_steer_turn(
+            codex_protocol::turn_input::TurnInputRequest::user_input(vec![UserInput::Text {
                 text: parent_prompt.to_string(),
                 text_elements: Vec::new(),
-            }]).with_thread_settings(Default::default()))
+            }])
+            .with_thread_settings(Default::default()),
+        )
         .await?;
     wait_for_event(&test.codex, |event| {
         matches!(event, EventMsg::TurnStarted(_))
@@ -1714,10 +1748,13 @@ async fn failed_nested_spawn_returns_to_its_parent_without_a_user_gate() -> Resu
         .build(&server)
         .await?;
     test.codex
-        .start_or_steer_turn(codex_protocol::turn_input::TurnInputRequest::user_input(vec![UserInput::Text {
+        .start_or_steer_turn(
+            codex_protocol::turn_input::TurnInputRequest::user_input(vec![UserInput::Text {
                 text: parent_prompt.to_string(),
                 text_elements: Vec::new(),
-            }]).with_thread_settings(Default::default()))
+            }])
+            .with_thread_settings(Default::default()),
+        )
         .await?;
     tokio::time::timeout(Duration::from_secs(10), async {
         loop {
@@ -1899,7 +1936,7 @@ async fn intermediate_message_is_corrected_once_and_never_reaches_parent_model()
         .await?;
         test.codex
             .submit(Op::InterAgentCommunication {
-                    start_options: Default::default(),
+                start_options: Default::default(),
                 communication: InterAgentCommunication::new(
                     AgentPath::try_from("/root/spawn_spawnlifecyclecall_0")
                         .expect("transaction child path should be valid"),
@@ -2591,10 +2628,13 @@ async fn spawn_capacity_rejection_and_interrupt_teardown_allow_immediate_reuse()
     let test = multi_agent_v2_spine_builder().build(&server).await?;
     let mut created_threads = test.thread_manager.subscribe_thread_created();
     test.codex
-        .start_or_steer_turn(codex_protocol::turn_input::TurnInputRequest::user_input(vec![UserInput::Text {
+        .start_or_steer_turn(
+            codex_protocol::turn_input::TurnInputRequest::user_input(vec![UserInput::Text {
                 text: FIRST_PARENT_PROMPT.to_string(),
                 text_elements: Vec::new(),
-            }]).with_thread_settings(Default::default()))
+            }])
+            .with_thread_settings(Default::default()),
+        )
         .await?;
     wait_for_request(&cancel_first, "first transaction child", |request| {
         request.body_contains_text("cancel-first-marker")
@@ -2709,7 +2749,7 @@ async fn spawn_capacity_rejection_and_interrupt_teardown_allow_immediate_reuse()
     test.codex.submit(Op::Interrupt).await?;
     test.codex
         .submit(Op::InterAgentCommunication {
-                    start_options: Default::default(),
+            start_options: Default::default(),
             communication: InterAgentCommunication::new(
                 AgentPath::try_from("/root/spawn_spawnlifecyclecall_0/worker")
                     .expect("cancelled descendant path"),
@@ -2747,10 +2787,13 @@ async fn spawn_capacity_rejection_and_interrupt_teardown_allow_immediate_reuse()
     }
 
     test.codex
-        .start_or_steer_turn(codex_protocol::turn_input::TurnInputRequest::user_input(vec![UserInput::Text {
+        .start_or_steer_turn(
+            codex_protocol::turn_input::TurnInputRequest::user_input(vec![UserInput::Text {
                 text: SECOND_PARENT_PROMPT.to_string(),
                 text_elements: Vec::new(),
-            }]).with_thread_settings(Default::default()))
+            }])
+            .with_thread_settings(Default::default()),
+        )
         .await?;
     wait_for_request(&replacement_first, "replacement first child", |request| {
         request.body_contains_text("replacement-first-marker")

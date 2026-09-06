@@ -1,5 +1,7 @@
 use std::collections::BTreeMap;
 
+use codex_history::RolloutItem;
+use codex_history::RolloutLine;
 use codex_protocol::models::AgentMessageInputContent;
 use codex_protocol::models::ContentItem;
 use codex_protocol::models::FunctionCallOutputBody;
@@ -12,8 +14,6 @@ use codex_protocol::models::ReasoningItemContent;
 use codex_protocol::models::ResponseItem;
 use codex_protocol::models::WebSearchAction;
 use codex_protocol::protocol::EventMsg;
-use codex_history::RolloutItem;
-use codex_history::RolloutLine;
 use codex_protocol::protocol::TokenUsage;
 use serde::Serialize;
 use serde::de::DeserializeSeed;
@@ -42,7 +42,9 @@ pub(crate) enum DebugRolloutRecord {
         scope: DebugPlaceholderScope,
     },
     OversizedRedacted,
-    TokenUsageRecord { usage: DebugTokenUsage },
+    TokenUsageRecord {
+        usage: DebugTokenUsage,
+    },
     SecurityRiskScore,
     RealtimeItem,
     SessionMeta {
@@ -965,7 +967,9 @@ impl RolloutDebugRedactor {
             RolloutItem::EventMsg(event) => DebugRolloutRecord::Event {
                 event: redact_event(event),
             },
-            RolloutItem::TokenUsageRecord(record) => DebugRolloutRecord::TokenUsageRecord { usage: debug_token_usage(record.usage) },
+            RolloutItem::TokenUsageRecord(record) => DebugRolloutRecord::TokenUsageRecord {
+                usage: debug_token_usage(record.usage),
+            },
             RolloutItem::SecurityRiskScore(_) => DebugRolloutRecord::SecurityRiskScore,
             RolloutItem::RealtimeItem(_) => DebugRolloutRecord::RealtimeItem,
             RolloutItem::SpineSamplingStarted(_) | RolloutItem::SpineTransition(_) => {

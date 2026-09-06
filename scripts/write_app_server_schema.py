@@ -14,7 +14,9 @@ def main() -> None:
     args = parser.parse_args()
     root = Path(__file__).resolve().parent.parent
     env = os.environ.copy()
-    env["CODEX_APP_SERVER_SCHEMA_ROOT"] = str(root / "codex-rs/app-server-protocol/schema")
+    env["CODEX_APP_SERVER_SCHEMA_ROOT"] = str(
+        root / "codex-rs/app-server-protocol/schema"
+    )
     env["CODEX_APP_SERVER_SCHEMA_EXPERIMENTAL"] = "1" if args.experimental else "0"
     if args.prettier is not None:
         env["CODEX_APP_SERVER_SCHEMA_PRETTIER"] = str(args.prettier.resolve())

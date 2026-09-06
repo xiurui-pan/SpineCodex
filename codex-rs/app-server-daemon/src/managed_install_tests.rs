@@ -22,7 +22,12 @@ esac
 "#).expect("write probe fixture");
     std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o755))
         .expect("make fixture executable");
-    assert_eq!(managed_codex_version(&executable).await.expect("product version"), "0.4.0");
+    assert_eq!(
+        managed_codex_version(&executable)
+            .await
+            .expect("product version"),
+        "0.4.0"
+    );
 }
 
 #[test]

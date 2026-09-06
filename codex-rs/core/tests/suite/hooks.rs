@@ -388,7 +388,10 @@ Path(r"{finished_path}").write_text(prompt, encoding="utf-8")
         started_path = started_path.display(),
         finished_path = finished_path.display(),
         release_path = release_path.display(),
-        gated = match mode { AsyncPromptHookFixture::Immediate => "False", AsyncPromptHookFixture::SingleDelayed => "True" },
+        gated = match mode {
+            AsyncPromptHookFixture::Immediate => "False",
+            AsyncPromptHookFixture::SingleDelayed => "True",
+        },
     );
     let hooks = serde_json::json!({
         "hooks": {
@@ -1826,7 +1829,13 @@ async fn async_hook_finishing_while_idle_waits_for_the_next_turn(
         }])
     };
     let submission = test.codex.start_turn_if_idle(next_turn).await?;
-    assert!(matches!(submission, codex_protocol::turn_input::StartIfIdleSubmission::Started { .. }), "idle turn was not started: {submission:?}");
+    assert!(
+        matches!(
+            submission,
+            codex_protocol::turn_input::StartIfIdleSubmission::Started { .. }
+        ),
+        "idle turn was not started: {submission:?}"
+    );
 
     let mut observed_events = Vec::new();
     let mut warning_event = None;

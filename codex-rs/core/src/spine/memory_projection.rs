@@ -167,9 +167,12 @@ fn replace_mutable_file(path: &Path, body: &[u8]) -> Result<()> {
 }
 
 fn persist_readonly_file(path: &Path, body: &str) -> Result<()> {
-    let parent = path.parent().context("Spine memory path has no parent directory")?;
+    let parent = path
+        .parent()
+        .context("Spine memory path has no parent directory")?;
     let mut staged = tempfile::NamedTempFile::new_in(parent)?;
-    staged.write_all(body.as_bytes())
+    staged
+        .write_all(body.as_bytes())
         .with_context(|| format!("failed to stage {}", path.display()))?;
     let writable_permissions = staged.as_file().metadata()?.permissions();
     let mut readonly_permissions = writable_permissions.clone();
@@ -184,7 +187,8 @@ fn persist_readonly_file(path: &Path, body: &str) -> Result<()> {
             // Restore the temporary file's original permissions so cleanup also works on Windows.
             err.file.as_file().set_permissions(writable_permissions)?;
             if err.error.kind() != ErrorKind::AlreadyExists {
-                return Err(err.error).with_context(|| format!("failed to publish {}", path.display()));
+                return Err(err.error)
+                    .with_context(|| format!("failed to publish {}", path.display()));
             }
             if !fs::symlink_metadata(path)?.file_type().is_file() {
                 bail!(

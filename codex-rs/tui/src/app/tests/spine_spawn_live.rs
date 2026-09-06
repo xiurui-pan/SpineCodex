@@ -18,7 +18,6 @@ use core_test_support::responses::sse;
 use core_test_support::responses::sse_response;
 use core_test_support::responses::start_mock_server;
 use pretty_assertions::assert_eq;
-use serde_json::Value;
 use serde_json::json;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -36,13 +35,17 @@ fn body_contains(request: &wiremock::Request, text: &str) -> bool {
 
 fn child_request(request: &wiremock::Request, marker: &str) -> bool {
     let body = core_test_support::responses::ResponsesRequest::from(request.clone()).body_json();
-    body["input"].as_array().is_some_and(|items| items.iter().any(|item| {
-        item["role"] == "user" && item["content"].as_array().is_some_and(|content| {
-            content.iter().filter_map(|part| part["text"].as_str()).any(|text| {
-                text.contains(BRANCH_PROMPT_MARKER) && text.contains(marker)
-            })
+    body["input"].as_array().is_some_and(|items| {
+        items.iter().any(|item| {
+            item["role"] == "user"
+                && item["content"].as_array().is_some_and(|content| {
+                    content
+                        .iter()
+                        .filter_map(|part| part["text"].as_str())
+                        .any(|text| text.contains(BRANCH_PROMPT_MARKER) && text.contains(marker))
+                })
         })
-    }))
+    })
 }
 
 fn matching_request_count(

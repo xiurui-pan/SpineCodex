@@ -128,8 +128,12 @@ async fn agent_slash_commands_open_their_native_views() {
         chat.dispatch_command(command);
 
         match command {
-            SlashCommand::Agents => assert_matches!(rx.try_recv(), Ok(AppEvent::OpenAgentsOverview)),
-            SlashCommand::MultiAgents => assert_matches!(rx.try_recv(), Ok(AppEvent::OpenAgentPicker)),
+            SlashCommand::Agents => {
+                assert_matches!(rx.try_recv(), Ok(AppEvent::OpenAgentsOverview))
+            }
+            SlashCommand::MultiAgents => {
+                assert_matches!(rx.try_recv(), Ok(AppEvent::OpenAgentPicker))
+            }
             _ => unreachable!("only agent navigation commands are tested"),
         }
         assert_matches!(rx.try_recv(), Err(TryRecvError::Empty));

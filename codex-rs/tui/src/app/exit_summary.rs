@@ -2,10 +2,10 @@
 //! Persisted sessions offer a direct UUID command and an optional named picker hint.
 
 use super::*;
-use codex_install_context::distribution::CLI_COMMAND;
 use crate::RemoteAppServerEndpoint;
 use crate::exec_command::escape_command;
 use crate::status::remote_connection::sanitized_websocket_url;
+use codex_install_context::distribution::CLI_COMMAND;
 
 /// A persisted thread that can be resumed after the TUI exits.
 #[derive(Debug, Clone, PartialEq, Eq)]

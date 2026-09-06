@@ -211,10 +211,10 @@ fn animated_activity_indicator(start_time: Option<Instant>) -> Span<'static> {
 
 #[cfg(test)]
 mod tests {
+    use pretty_assertions::assert_eq;
     use std::fs;
     use std::path::Path;
     use std::path::PathBuf;
-    use pretty_assertions::assert_eq;
 
     use super::*;
 

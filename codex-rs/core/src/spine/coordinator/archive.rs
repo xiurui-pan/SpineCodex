@@ -38,7 +38,7 @@ pub(crate) fn encode_spine_sampling_started(
     Ok(SpineSamplingStartedItem {
         sdk_config: None,
         replay_seed: None,
-                    version: SPINE_ROLLOUT_VERSION,
+        version: SPINE_ROLLOUT_VERSION,
         payload: encode_record(record)?,
     })
 }
@@ -144,14 +144,28 @@ pub(crate) enum CoordinatorError {
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub(super) enum ReplaySeedItem {
-    Source { boundary: u64, item: RolloutItem },
-    Compact { barrier: spine_core::host::SpineCompactBarrierV1, replacement: Vec<RolloutItem> },
-    Usage { boundary: u64, input_tokens: i64, model_context_window: Option<i64> },
+    Source {
+        boundary: u64,
+        item: RolloutItem,
+    },
+    Compact {
+        barrier: spine_core::host::SpineCompactBarrierV1,
+        replacement: Vec<RolloutItem>,
+    },
+    Usage {
+        boundary: u64,
+        input_tokens: i64,
+        model_context_window: Option<i64>,
+    },
 }
 
-pub(super) fn seed_response_item(item: RolloutItem) -> Result<codex_history::ResponseItemEnvelope, CoordinatorError> {
+pub(super) fn seed_response_item(
+    item: RolloutItem,
+) -> Result<codex_history::ResponseItemEnvelope, CoordinatorError> {
     match item {
         RolloutItem::ResponseItem(item) => Ok(item),
-        _ => Err(CoordinatorError::Replay("initialization seed source must contain a response item".to_string())),
+        _ => Err(CoordinatorError::Replay(
+            "initialization seed source must contain a response item".to_string(),
+        )),
     }
 }

@@ -15,8 +15,14 @@ use codex_protocol::models::ResponseItem;
 fn legacy_spine_records_keep_their_wire_shape() -> Result<()> {
     // Artificial old-format records: no personal session data or credentials.
     for (kind, payload) in [
-        ("spine_sampling_started", json!({"thread": "thread-1", "epoch": 3})),
-        ("spine_transition", json!({"type": "sampling_shadow_v1", "record": {"digest": "abc"}})),
+        (
+            "spine_sampling_started",
+            json!({"thread": "thread-1", "epoch": 3}),
+        ),
+        (
+            "spine_transition",
+            json!({"type": "sampling_shadow_v1", "record": {"digest": "abc"}}),
+        ),
     ] {
         let legacy = json!({
             "timestamp": "2026-09-01T12:00:00.000Z",
@@ -35,7 +41,9 @@ fn compaction_beside_spine_records_preserves_harness_metadata_and_review_history
     let item = ResponseItem::Message {
         id: None,
         role: "developer".to_string(),
-        content: vec![ContentItem::InputText { text: "client instruction".to_string() }],
+        content: vec![ContentItem::InputText {
+            text: "client instruction".to_string(),
+        }],
         phase: None,
         internal_chat_message_metadata_passthrough: None,
     };
@@ -60,8 +68,8 @@ fn compaction_beside_spine_records_preserves_harness_metadata_and_review_history
     let items = vec![
         RolloutItem::SpineSamplingStarted(crate::SpineSamplingStartedItem {
             sdk_config: None,
-        replay_seed: None,
-                    version: 1,
+            replay_seed: None,
+            version: 1,
             payload: json!({"schema": "spine.sampling.started"}),
         }),
         RolloutItem::Compacted(checkpoint.clone()),

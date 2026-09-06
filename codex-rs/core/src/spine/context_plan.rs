@@ -1,4 +1,3 @@
-use codex_history::ResponseItemEnvelope;
 use super::materialize_context;
 use super::memory_projection::SpinetreeUserMessageProjectionEntry;
 use super::message_from_response_item;
@@ -7,9 +6,10 @@ use crate::context::MAX_SPINE_MODEL_ITEM_WIRE_BYTES;
 use crate::context::SpineUserAnchor;
 use crate::context::spine_model_item_wire_bytes;
 use crate::context::validate_spine_model_item;
-use codex_utils_output_truncation::truncate_function_output_payload;
+use codex_history::ResponseItemEnvelope;
 use codex_protocol::models::ResponseItem;
 use codex_protocol::protocol::TruncationPolicy;
+use codex_utils_output_truncation::truncate_function_output_payload;
 use spine_core::host::ContextCellProvenance;
 use spine_core::host::ContextLabel;
 use spine_core::host::ContextPlanRecipe;

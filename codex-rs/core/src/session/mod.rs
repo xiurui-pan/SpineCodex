@@ -220,10 +220,12 @@ use codex_protocol::error::Result as CodexResult;
 use codex_protocol::exec_output::StreamOutput;
 
 mod code_mode_warning;
+mod compaction;
 pub(crate) mod context_window;
 mod environment;
 pub(crate) mod extension_metrics;
 mod handlers;
+mod initial_context;
 mod inject;
 mod input_queue;
 mod mcp;
@@ -237,6 +239,8 @@ mod rollout_budget;
 mod rollout_reconstruction;
 #[allow(clippy::module_inception)]
 pub(crate) mod session;
+#[path = "../spine/fork_context.rs"]
+mod spine_fork_context;
 mod step_activation;
 pub(crate) mod step_context;
 pub(crate) mod step_settings;
@@ -248,17 +252,13 @@ pub(crate) mod turn_context;
 mod turn_input;
 mod turn_suspension;
 mod world_state;
-mod initial_context;
-mod compaction;
-#[path = "../spine/fork_context.rs"]
-mod spine_fork_context;
 use self::code_mode_warning::unsupported_code_mode_warning;
 #[cfg(test)]
 use self::handlers::submission_dispatch_span;
 use self::handlers::submission_loop;
 pub(crate) use self::input_queue::InputQueueActivity;
-pub(crate) use self::input_queue::TurnInput;
 pub(crate) use self::input_queue::MailboxSubmissionCancellation;
+pub(crate) use self::input_queue::TurnInput;
 pub(crate) use self::input_queue::TurnInputQueue;
 use self::review::spawn_review_thread;
 use self::session::AppServerClientMetadata;
@@ -613,8 +613,9 @@ impl Session {
         };
 
         let mut config = config;
-        crate::spine::config::restore_sampling_config(&mut config, &conversation_history)
-            .map_err(|error| CodexErr::Fatal(format!("failed to initialize Spine configuration: {error}")))?;
+        crate::spine::config::restore_sampling_config(&mut config, &conversation_history).map_err(
+            |error| CodexErr::Fatal(format!("failed to initialize Spine configuration: {error}")),
+        )?;
         let mut config = Arc::new(config);
         let refresh_strategy = if session_source.is_non_root_agent() {
             codex_models_manager::manager::RefreshStrategy::Offline
@@ -1354,8 +1355,7 @@ impl Session {
             && matches!(
                 instructions.provenance,
                 Some(BaseInstructionsProvenance::Model { .. })
-            )
-        {
+            ) {
             BaseInstructions {
                 text: crate::context::without_update_plan_instructions(&instructions.text),
                 ..instructions
@@ -1393,7 +1393,10 @@ impl Session {
         state.clear_connector_selection();
     }
 
-    async fn record_initial_history(&self, conversation_history: InitialHistory) -> anyhow::Result<()> {
+    async fn record_initial_history(
+        &self,
+        conversation_history: InitialHistory,
+    ) -> anyhow::Result<()> {
         let (is_subagent, is_paginated_subagent) = {
             let state = self.state.lock().await;
             let session_configuration = &state.session_configuration;
@@ -1424,8 +1427,11 @@ impl Session {
             InitialHistory::Resumed(resumed_history) => {
                 let turn_context = self.new_default_turn().await;
                 let rollout_items = resumed_history.history;
-                let spine_history = resumed_history.spine_history.as_deref()
-                    .map(Vec::as_slice).unwrap_or(rollout_items.as_slice());
+                let spine_history = resumed_history
+                    .spine_history
+                    .as_deref()
+                    .map(Vec::as_slice)
+                    .unwrap_or(rollout_items.as_slice());
                 if matches!(
                     rollout_items.iter().rev().find_map(|item| match item {
                         RolloutItem::EventMsg(event) => agent_status_from_event(event),
@@ -1436,7 +1442,11 @@ impl Session {
                     self.agent_status.send_replace(AgentStatus::Interrupted);
                 }
                 let previous_turn_settings = self
-                    .apply_rollout_reconstruction_with_spine_history(&turn_context, &rollout_items, spine_history)
+                    .apply_rollout_reconstruction_with_spine_history(
+                        &turn_context,
+                        &rollout_items,
+                        spine_history,
+                    )
                     .await?;
 
                 // If resuming, warn when the last recorded model differs from the current one.
@@ -1555,7 +1565,12 @@ impl Session {
         turn_context: &TurnContext,
         rollout_items: &[RolloutItem],
     ) -> anyhow::Result<Option<PreviousTurnSettings>> {
-        self.apply_rollout_reconstruction_with_spine_history(turn_context, rollout_items, rollout_items).await
+        self.apply_rollout_reconstruction_with_spine_history(
+            turn_context,
+            rollout_items,
+            rollout_items,
+        )
+        .await
     }
 
     async fn apply_rollout_reconstruction_with_spine_history(
@@ -1612,7 +1627,9 @@ impl Session {
             state
                 .history
                 .restore_guardian_history(guardian_history.as_ref());
-            state.replay_spine_history(spine_history).map_err(anyhow::Error::msg)?;
+            state
+                .replay_spine_history(spine_history)
+                .map_err(anyhow::Error::msg)?;
             if let Some(world_state) = world_state_baseline {
                 state.history.set_world_state_baseline(world_state);
             }
@@ -3799,7 +3816,9 @@ impl Session {
     ) {
         let mut state = self.state.lock().await;
         state.replace_history(items, reference_context_item);
-        state.replay_spine_history(&[]).expect("replay test history");
+        state
+            .replay_spine_history(&[])
+            .expect("replay test history");
     }
 
     pub fn enabled(&self, feature: Feature) -> bool {
