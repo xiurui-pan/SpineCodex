@@ -305,14 +305,14 @@ fn find_spine_sampling_boundary_blocking(
             if line.trim().is_empty() {
                 continue;
             }
-            let record: RolloutLine = serde_json::from_str(line.trim_end()).map_err(|err| {
-                ThreadStoreError::InvalidRequest {
+            let record: RolloutLine = serde_json::from_str(line.trim_end())
+                .and_then(codex_rollout::decode_rollout_line)
+                .map_err(|err| ThreadStoreError::InvalidRequest {
                     message: format!(
                         "invalid sampling-boundary record in {}: {err}",
                         segment.rollout_path.display()
                     ),
-                }
-            })?;
+                })?;
             let ordinal = record
                 .ordinal
                 .ok_or_else(|| ThreadStoreError::InvalidRequest {
