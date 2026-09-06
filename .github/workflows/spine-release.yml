@@ -16,7 +16,7 @@ on:
         description: "Synthetic SemVer for a no-publish rehearsal."
         required: true
         type: string
-        default: "0.4.0-rehearsal.1"
+        default: "0.4.1-rehearsal.1"
 
 concurrency:
   group: spine-release-${{ github.ref }}

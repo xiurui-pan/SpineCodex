@@ -82,7 +82,7 @@ class AppServer:
         initialized = self.request(
             "initialize",
             {
-                "clientInfo": {"name": "spine-migration-smoke", "version": "0.4.0"},
+                "clientInfo": {"name": "spine-migration-smoke", "version": "0.4.1"},
                 "capabilities": {"experimentalApi": True},
             },
         )
@@ -186,7 +186,7 @@ code_mode = true
                         "capabilities": {},
                         "clientInfo": {
                             "name": "migration-product-probe",
-                            "version": "0.4.0",
+                            "version": "0.4.1",
                         },
                     },
                 }
@@ -203,7 +203,7 @@ code_mode = true
             for line in probe.stdout.splitlines()
             if json.loads(line).get("id") == 1
         )
-        assert product == "0.4.0", product
+        assert product == "0.4.1", product
         with (args.log_dir / "app-server.stderr").open("w") as stderr:
             app = AppServer(binary, environment, stderr)
             started = app.request(

@@ -17,7 +17,10 @@ Branch: `spine/upgrade-codex-0.153.4`.
 
 ## Acceptance status
 
-P0-P6 source adaptations are present; package validation is in progress. No migration candidate is ready for use or release. The original main worktree remains unchanged.
+P0-P6 source adaptations and local validation are complete. The 0.4.1 follow-up
+repairs paginated Spine Spawn startup; see [Spine Spawn validation](SPAWN_FIX_VALIDATION.md)
+for current results and the three independently reproduced upstream test failures.
+The entries below retain the intermediate migration evidence.
 
 ## Verified P1 foundations
 
