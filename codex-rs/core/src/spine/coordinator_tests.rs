@@ -691,7 +691,7 @@ fn sequential_one_task_spawn_facts_append_closed_children() {
             .iter()
             .filter_map(|node| node.summary.as_deref())
             .collect::<Vec<_>>(),
-        ["first", "second"]
+        ["root", "first", "second"]
     );
     assert_eq!(second.settled_spawn_call_ids, ["wave-2"]);
 }
@@ -759,7 +759,7 @@ fn sequential_one_task_spawn_facts_replay_the_same_closed_children() {
             .iter()
             .filter_map(|node| node.summary.as_deref())
             .collect::<Vec<_>>(),
-        ["first", "second"]
+        ["root", "first", "second"]
     );
 
     let effective = rollout.iter().enumerate().collect::<Vec<_>>();

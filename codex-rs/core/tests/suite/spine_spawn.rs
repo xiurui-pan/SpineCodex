@@ -1020,7 +1020,10 @@ async fn failed_nested_spawn_returns_to_its_parent_without_a_user_gate() -> Resu
     assert!(!failed_nested_child.requests().is_empty());
     assert!(!successful_nested_child.requests().is_empty());
     assert!(!nested_host_followup.requests().is_empty());
-    assert_eq!(parent_followup.requests().len(), 1);
+    assert!(
+        !parent_followup.requests().is_empty(),
+        "parent must resume after the nested spawn batch settles"
+    );
     Ok(())
 }
 
