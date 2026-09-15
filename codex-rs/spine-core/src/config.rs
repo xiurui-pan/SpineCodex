@@ -63,6 +63,7 @@ struct ToolDescriptions {
     close: Option<String>,
     next: Option<String>,
     spawn: Option<String>,
+    collect: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -101,6 +102,8 @@ struct FileTools {
     next: Option<FileToolDescription>,
     #[serde(default)]
     spawn: Option<FileToolDescription>,
+    #[serde(default)]
+    collect: Option<FileToolDescription>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -119,6 +122,7 @@ impl SpineConfig {
             ("close", &self.tool_descriptions.close),
             ("next", &self.tool_descriptions.next),
             ("spawn", &self.tool_descriptions.spawn),
+            ("collect", &self.tool_descriptions.collect),
         ] {
             if let Some(description) = description {
                 tools.insert(
@@ -230,6 +234,15 @@ impl SpineConfig {
                     .map(|tool| tool.description.as_str()),
                 MAX_TOOL_DESCRIPTION_BYTES,
             ),
+            (
+                "tools.collect.description",
+                parsed
+                    .tools
+                    .collect
+                    .as_ref()
+                    .map(|tool| tool.description.as_str()),
+                MAX_TOOL_DESCRIPTION_BYTES,
+            ),
         ] {
             validate_model_visible_text(name, value, max_bytes)?;
         }
@@ -259,6 +272,7 @@ impl SpineConfig {
                 close: parsed.tools.close.map(|tool| tool.description),
                 next: parsed.tools.next.map(|tool| tool.description),
                 spawn: parsed.tools.spawn.map(|tool| tool.description),
+                collect: parsed.tools.collect.map(|tool| tool.description),
             },
             features: BTreeSet::new(),
         })
@@ -326,6 +340,7 @@ impl SpineConfig {
             "close" => self.tool_descriptions.close.as_deref(),
             "next" => self.tool_descriptions.next.as_deref(),
             "spawn" => self.tool_descriptions.spawn.as_deref(),
+            "collect" => self.tool_descriptions.collect.as_deref(),
             _ => None,
         }
     }
@@ -355,6 +370,7 @@ impl SpineConfig {
                 Feature::Spawn,
             )?;
             require_tool(self.tool_description("spawn"), "spawn")?;
+            require_tool(self.tool_description("collect"), "collect")?;
         }
         let prompt_segments = [Feature::Jit, Feature::Spawn]
             .into_iter()
@@ -551,6 +567,8 @@ description = "close description"
 description = "next description"
 [tools.spawn]
 description = "spawn description"
+[tools.collect]
+description = "collect description"
 "#;
 
     #[test]
@@ -616,6 +634,11 @@ description = "spawn description"
             (
                 "tools.spawn.description",
                 "spawn description",
+                MAX_TOOL_DESCRIPTION_BYTES,
+            ),
+            (
+                "tools.collect.description",
+                "collect description",
                 MAX_TOOL_DESCRIPTION_BYTES,
             ),
         ] {
@@ -685,6 +708,7 @@ description = "spawn description"
             config.tool_description("close").unwrap_or_default(),
             config.tool_description("next").unwrap_or_default(),
             config.tool_description("spawn").unwrap_or_default(),
+            config.tool_description("collect").unwrap_or_default(),
         ];
 
         assert!(

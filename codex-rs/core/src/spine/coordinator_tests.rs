@@ -41,7 +41,7 @@ fn message(role: &str, text: &str) -> ResponseItem {
         }]
     };
     ResponseItem::Message {
-        id: Some(ResponseItemId::from_server(format!("{role}-id"))),
+        id: Some(ResponseItemId::from_server(format!("{role}-{text}"))),
         role: role.to_string(),
         content,
         phase: None,
@@ -109,9 +109,17 @@ fn install_spawn_sampling(
     coordinator: &mut CodexSpineCoordinator,
     call_id: &str,
 ) -> InstalledCanonicalCommit {
+    install_spawn_operation(coordinator, call_id, spawn_operation())
+}
+
+fn install_spawn_operation(
+    coordinator: &mut CodexSpineCoordinator,
+    call_id: &str,
+    operation: SpineOperationFact,
+) -> InstalledCanonicalCommit {
     coordinator
         .observe_response_items(
-            &[message("user", "spawn request")]
+            &[message("user", &format!("{call_id} spawn request"))]
                 .iter()
                 .cloned()
                 .map(Into::into)
@@ -128,12 +136,12 @@ fn install_spawn_sampling(
             ExecutionOrigin::Direct {
                 execution_ref: call_id.to_string(),
             },
-            spawn_operation(),
+            operation,
         )
         .expect("stage spawn fact");
     coordinator
         .observe_response_items(
-            &[message("assistant", "spawn completed")]
+            &[message("assistant", &format!("{call_id} spawn completed"))]
                 .iter()
                 .cloned()
                 .map(Into::into)
@@ -144,6 +152,22 @@ fn install_spawn_sampling(
         .finish_execution(call_id, true)
         .expect("finish spawn execution");
     install_sampling_for_test(coordinator, attempt).expect("install spawn sampling")
+}
+
+fn spawn_wave_operation(summary: &str, prompt: &str, memory: &str) -> SpineOperationFact {
+    SpineOperationFact::Spawn {
+        tasks: vec![SpawnTask {
+            summary: summary.to_string(),
+            prompt: prompt.to_string(),
+        }],
+        terminal_results: vec![SpawnResult {
+            ordinal: 0,
+            outcome: SpawnOutcome::Completed,
+            memory_body: memory.to_string(),
+            diagnostic: None,
+            execution_ref: Some(format!("{summary}-ref")),
+        }],
+    }
 }
 
 fn install_sampling_for_test(
@@ -618,6 +642,136 @@ fn canonical_replay_does_not_resettle_historical_spawn_calls() {
 
     assert_eq!(replayed.projection, live_commit.projection);
     assert_eq!(replayed.settled_spawn_call_ids, Vec::<String>::new());
+}
+
+#[test]
+fn incomplete_spawn_wave_holds_settlement_until_release() {
+    let mut coordinator = spawn_coordinator();
+    coordinator.hold_spawn_settlement("spawn-live");
+    let held = install_spawn_sampling(&mut coordinator, "spawn-live");
+    assert_eq!(held.settled_spawn_call_ids, Vec::<String>::new());
+
+    coordinator.release_spawn_settlement("spawn-live");
+    let attempt = begin_sampling_for_test(&mut coordinator).expect("begin follow-up sampling");
+    coordinator
+        .observe_response_items(
+            &[message("assistant", "parent continued")]
+                .iter()
+                .cloned()
+                .map(Into::into)
+                .collect::<Vec<_>>(),
+        )
+        .expect("observe follow-up source");
+    let released = install_sampling_for_test(&mut coordinator, attempt).expect("install follow-up");
+    assert_eq!(released.settled_spawn_call_ids, ["spawn-live"]);
+}
+
+#[test]
+fn sequential_one_task_spawn_facts_append_closed_children() {
+    let mut coordinator = spawn_coordinator();
+    let first = install_spawn_operation(
+        &mut coordinator,
+        "wave-1",
+        spawn_wave_operation("first", "first task", "first memory"),
+    );
+    assert_eq!(first.projection.nodes.len(), 2);
+    assert_eq!(first.projection.nodes[1].summary.as_deref(), Some("first"));
+    assert_eq!(first.settled_spawn_call_ids, ["wave-1"]);
+
+    let second = install_spawn_operation(
+        &mut coordinator,
+        "wave-2",
+        spawn_wave_operation("second", "second task", "second memory"),
+    );
+    assert_eq!(second.projection.nodes.len(), 3);
+    assert_eq!(
+        second
+            .projection
+            .nodes
+            .iter()
+            .filter_map(|node| node.summary.as_deref())
+            .collect::<Vec<_>>(),
+        ["root", "first", "second"]
+    );
+    assert_eq!(second.settled_spawn_call_ids, ["wave-2"]);
+}
+
+#[test]
+fn sequential_one_task_spawn_facts_replay_the_same_closed_children() {
+    let mut live = spawn_coordinator();
+    let mut rollout = Vec::new();
+    let mut last = None;
+    for (call_id, summary, prompt, memory) in [
+        ("wave-1", "first", "first task", "first memory"),
+        ("wave-2", "second", "second task", "second memory"),
+    ] {
+        let user = message("user", &format!("{call_id} spawn request"));
+        live.observe_response_items(
+            &(std::slice::from_ref(&user))
+                .iter()
+                .cloned()
+                .map(Into::into)
+                .collect::<Vec<_>>(),
+        )
+        .expect("observe spawn prompt source");
+        rollout.push(RolloutItem::ResponseItem(user.into()));
+        let attempt = live.begin_sampling().expect("begin spawn sampling");
+        rollout.push(
+            live.sampling_started_rollout_item(&attempt, &[])
+                .expect("sampling started"),
+        );
+        live.register_execution(call_id)
+            .expect("register spawn execution");
+        live.stage_execution(
+            call_id,
+            ExecutionOrigin::Direct {
+                execution_ref: call_id.to_string(),
+            },
+            spawn_wave_operation(summary, prompt, memory),
+        )
+        .expect("stage spawn fact");
+        let response = message("assistant", &format!("{call_id} spawn completed"));
+        live.observe_response_items(
+            &(std::slice::from_ref(&response))
+                .iter()
+                .cloned()
+                .map(Into::into)
+                .collect::<Vec<_>>(),
+        )
+        .expect("observe spawn sampling source");
+        rollout.push(RolloutItem::ResponseItem(response.into()));
+        live.finish_execution(call_id, true)
+            .expect("finish spawn execution");
+        let prepared = live
+            .prepare_canonical_sampling(attempt)
+            .expect("prepare spawn commit");
+        rollout.push(prepared.rollout_item());
+        last = Some(
+            live.install_canonical_sampling(prepared)
+                .expect("install spawn sampling"),
+        );
+    }
+    let live_commit = last.expect("second spawn wave");
+    assert_eq!(
+        live_commit
+            .projection
+            .nodes
+            .iter()
+            .filter_map(|node| node.summary.as_deref())
+            .collect::<Vec<_>>(),
+        ["root", "first", "second"]
+    );
+
+    let effective = rollout.iter().enumerate().collect::<Vec<_>>();
+    let ReplayMode::Canonical { thread, records } =
+        replay_mode(&effective).expect("canonical replay mode")
+    else {
+        panic!("rollout must be canonical");
+    };
+    let replayed = spawn_coordinator()
+        .replay_canonical(&effective, &live_commit.context.items, thread, records)
+        .expect("replay incremental spawn waves");
+    assert_eq!(replayed.projection, live_commit.projection);
 }
 
 #[test]

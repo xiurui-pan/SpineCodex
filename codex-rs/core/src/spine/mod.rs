@@ -43,6 +43,7 @@ pub(crate) mod rollout_debug;
 pub(crate) mod session_config;
 pub(crate) mod session_runtime;
 pub(crate) mod spawn;
+#[allow(dead_code)]
 pub(crate) mod spawn_gate;
 pub(crate) mod tool_response;
 
@@ -64,6 +65,7 @@ pub(crate) fn validated_control_fact(
             })
         }
         ToolValidation::Transition(ValidatedTransition::Spawn { .. })
+        | ToolValidation::Transition(ValidatedTransition::Collect { .. })
         | ToolValidation::Ordinary => Err(spine_core::host::ToolValidationError::UnknownTool(
             tool.qualified_name(),
         )),
