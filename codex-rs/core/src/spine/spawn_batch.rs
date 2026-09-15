@@ -306,48 +306,44 @@ impl LiveSpawnBatch {
     }
 }
 
-fn run_waiters(
+async fn run_waiters(
     batch: Arc<LiveSpawnBatch>,
     waits: Vec<(usize, ThreadId, AgentPath)>,
     batch_cancel: CancellationToken,
-) -> impl std::future::Future<Output = ()> {
-    async move {
-        let mut pending = waits
-            .into_iter()
-            .map(|(ordinal, thread_id, path)| {
-                child_wait(Arc::clone(&batch), ordinal, thread_id, path)
-            })
-            .collect::<FuturesUnordered<_>>();
-        let mut interval = tokio::time::interval(Duration::from_millis(25));
-        loop {
-            tokio::select! {
-                item = pending.next() => {
-                    let Some((ordinal, result)) = item else {
-                        break;
-                    };
-                    complete_child(&batch, ordinal, result).await;
-                }
-                () = batch_cancel.cancelled() => break,
-                _ = interval.tick() => {
-                    let child_by_path = batch.child_by_path.lock().await.clone();
-                    let mut corrected_ids = batch.corrected_ids.lock().await;
-                    correct_intermediate_messages(
-                        &batch.session,
-                        &batch.parent_path,
-                        &batch.child_paths,
-                        &child_by_path,
-                        &mut corrected_ids,
-                    )
-                    .await;
-                }
+) {
+    let mut pending = waits
+        .into_iter()
+        .map(|(ordinal, thread_id, path)| child_wait(Arc::clone(&batch), ordinal, thread_id, path))
+        .collect::<FuturesUnordered<_>>();
+    let mut interval = tokio::time::interval(Duration::from_millis(25));
+    loop {
+        tokio::select! {
+            item = pending.next() => {
+                let Some((ordinal, result)) = item else {
+                    break;
+                };
+                complete_child(&batch, ordinal, result).await;
+            }
+            () = batch_cancel.cancelled() => break,
+            _ = interval.tick() => {
+                let child_by_path = batch.child_by_path.lock().await.clone();
+                let mut corrected_ids = batch.corrected_ids.lock().await;
+                correct_intermediate_messages(
+                    &batch.session,
+                    &batch.parent_path,
+                    &batch.child_paths,
+                    &child_by_path,
+                    &mut corrected_ids,
+                )
+                .await;
             }
         }
-        if batch_cancel.is_cancelled() {
-            batch.abort().await;
-            batch.session.spine_spawn_batch.clear();
-        } else {
-            batch.notify.notify_waiters();
-        }
+    }
+    if batch_cancel.is_cancelled() {
+        batch.abort().await;
+        batch.session.spine_spawn_batch.clear();
+    } else {
+        batch.notify.notify_waiters();
     }
 }
 

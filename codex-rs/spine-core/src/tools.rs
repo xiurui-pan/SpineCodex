@@ -164,15 +164,11 @@ pub enum ToolValidation {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum CollectWait {
+    #[default]
     Next,
     All,
-}
-
-impl Default for CollectWait {
-    fn default() -> Self {
-        Self::Next
-    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
