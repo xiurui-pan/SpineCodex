@@ -90,6 +90,8 @@ pub(crate) struct CodexSpineCoordinator {
     usage_samples: Vec<TokenUsageSample>,
     context_window_samples: Vec<ContextWindowSample>,
     user_messages: Vec<SpinetreeUserMessageProjectionEntry>,
+    held_spawn_call_ids: std::collections::HashSet<String>,
+    released_spawn_call_ids: Vec<String>,
 }
 
 impl CodexSpineCoordinator {
@@ -119,6 +121,8 @@ impl CodexSpineCoordinator {
             usage_samples: Vec::new(),
             context_window_samples: Vec::new(),
             user_messages: Vec::new(),
+            held_spawn_call_ids: std::collections::HashSet::new(),
+            released_spawn_call_ids: Vec::new(),
         })
     }
 
@@ -301,7 +305,7 @@ impl CodexSpineCoordinator {
         let CanonicalSamplingCommit {
             prepared, context, ..
         } = commit;
-        let settled_spawn_call_ids = prepared
+        let settled_from_facts: Vec<String> = prepared
             .durable_record()
             .executions
             .iter()
@@ -311,7 +315,14 @@ impl CodexSpineCoordinator {
                     execution_ref.clone()
                 }
             })
+            .filter(|call_id| !self.held_spawn_call_ids.contains(call_id))
             .collect();
+        let mut settled_spawn_call_ids = settled_from_facts;
+        for call_id in self.released_spawn_call_ids.drain(..) {
+            if !settled_spawn_call_ids.contains(&call_id) {
+                settled_spawn_call_ids.push(call_id);
+            }
+        }
         let output = self.runtime.install_prepared(prepared)?;
         Ok(InstalledCanonicalCommit {
             context,
@@ -396,6 +407,17 @@ impl CodexSpineCoordinator {
     ) -> Result<(), CoordinatorError> {
         self.require_healthy()?;
         Ok(self.runtime.stage_execution(key, origin, operation)?)
+    }
+
+    pub(crate) fn hold_spawn_settlement(&mut self, call_id: impl Into<String>) {
+        self.held_spawn_call_ids.insert(call_id.into());
+    }
+
+    pub(crate) fn release_spawn_settlement(&mut self, call_id: impl Into<String>) {
+        let call_id = call_id.into();
+        if self.held_spawn_call_ids.remove(&call_id) {
+            self.released_spawn_call_ids.push(call_id);
+        }
     }
 
     pub(crate) fn validate_control(&self, tool: spine_core::host::SpineTool) -> Result<(), String> {

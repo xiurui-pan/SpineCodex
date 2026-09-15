@@ -262,6 +262,14 @@ impl Session {
         });
     }
 
+    pub(crate) fn hold_spawn_settlement(&self, call_id: &str) {
+        self.with_spine_coordinator(|coordinator| coordinator.hold_spawn_settlement(call_id));
+    }
+
+    pub(crate) fn release_spawn_settlement(&self, call_id: &str) {
+        self.with_spine_coordinator(|coordinator| coordinator.release_spawn_settlement(call_id));
+    }
+
     fn finish_spine_execution(&self, key: &str, succeeded: bool) {
         self.try_spine("finish execution", |coordinator| {
             coordinator.finish_execution(key, succeeded)

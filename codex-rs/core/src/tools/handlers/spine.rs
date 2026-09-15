@@ -16,10 +16,13 @@ use codex_tools::ToolExposure;
 use codex_tools::ToolName;
 use codex_tools::ToolSpec;
 use codex_tools::parse_tool_input_schema_without_compaction;
+use spine_core::host::CollectWait;
 use spine_core::host::SpineOperationFact;
 use spine_core::host::SpineTool;
 use spine_core::host::ToolCatalog;
 use spine_core::host::ToolDefinition;
+use spine_core::host::ToolValidation;
+use spine_core::host::ValidatedTransition;
 
 pub(crate) struct SpineHandler {
     definition: ToolDefinition,
@@ -28,7 +31,9 @@ pub(crate) struct SpineHandler {
 impl SpineHandler {
     pub(crate) fn add_tools(catalog: &ToolCatalog, mode: ModeKind, mut add: impl FnMut(Self)) {
         for definition in catalog.definitions() {
-            if mode == ModeKind::Plan && definition.tool == SpineTool::Spawn {
+            if mode == ModeKind::Plan
+                && matches!(definition.tool, SpineTool::Spawn | SpineTool::Collect)
+            {
                 continue;
             }
             add(Self {
@@ -146,6 +151,10 @@ impl SpineHandler {
 
         let response_tool = match self.definition.tool {
             tool @ (SpineTool::Open | SpineTool::Close | SpineTool::Next) => {
+                session
+                    .spine_spawn_batch
+                    .reject_structural_control()
+                    .map_err(FunctionCallError::RespondToModel)?;
                 let operation = validate_control_fact(tool, &arguments)?;
                 let validation = session
                     .lock_spine_coordinator()
@@ -168,13 +177,17 @@ impl SpineHandler {
                 }
             }
             SpineTool::Spawn => {
+                session
+                    .spine_spawn_batch
+                    .reject_structural_control()
+                    .map_err(FunctionCallError::RespondToModel)?;
                 let call = crate::tools::parallel::await_current_spine_spawn_call(
                     &call_id,
                     &cancellation_token,
                 )
                 .await
                 .map_err(FunctionCallError::RespondToModel)?;
-                let (tasks, receipt) = crate::spine::spawn::execute(
+                let wave = crate::spine::spawn::execute(
                     session.clone(),
                     step_context,
                     call.call_id,
@@ -183,17 +196,23 @@ impl SpineHandler {
                 )
                 .await
                 .map_err(FunctionCallError::RespondToModel)?;
-                session.stage_spine_fact(
+                return Ok(boxed_tool_output(stage_spawn_wave(
+                    &session, &call_id, origin, wave,
+                )));
+            }
+            SpineTool::Collect => {
+                let wait = parse_collect_wait(&arguments)?;
+                crate::tools::parallel::await_current_spine_collect_call(
                     &call_id,
-                    origin,
-                    SpineOperationFact::Spawn {
-                        tasks,
-                        terminal_results: receipt.results,
-                    },
-                );
-                return Ok(boxed_tool_output(FunctionToolOutput::from_text(
-                    r#"{"status":"success"}"#.to_string(),
-                    Some(true),
+                    &cancellation_token,
+                )
+                .await
+                .map_err(FunctionCallError::RespondToModel)?;
+                let wave = crate::spine::spawn::collect(session.clone(), wait, cancellation_token)
+                    .await
+                    .map_err(FunctionCallError::RespondToModel)?;
+                return Ok(boxed_tool_output(stage_spawn_wave(
+                    &session, &call_id, origin, wave,
                 )));
             }
         };
@@ -208,8 +227,40 @@ impl CoreToolRuntime for SpineHandler {
     }
 
     fn waits_for_runtime_cancellation(&self) -> bool {
-        self.definition.tool == SpineTool::Spawn
+        self.definition.tool == SpineTool::Spawn || self.definition.tool == SpineTool::Collect
     }
+}
+
+fn parse_collect_wait(arguments: &str) -> Result<CollectWait, FunctionCallError> {
+    match spine_core::host::validate_tool(SpineTool::Collect, arguments) {
+        Ok(ToolValidation::Transition(ValidatedTransition::Collect { wait })) => Ok(wait),
+        Ok(_) => Err(FunctionCallError::RespondToModel(
+            "spine.collect validation returned an unexpected result".to_string(),
+        )),
+        Err(error) => Err(FunctionCallError::RespondToModel(error.to_string())),
+    }
+}
+
+fn stage_spawn_wave(
+    session: &std::sync::Arc<crate::session::session::Session>,
+    call_id: &str,
+    origin: spine_core::host::ExecutionOrigin,
+    wave: crate::spine::spawn::SpawnWave,
+) -> FunctionToolOutput {
+    if wave.complete {
+        session.release_spawn_settlement(&wave.spawn_call_id);
+    } else {
+        session.hold_spawn_settlement(&wave.spawn_call_id);
+    }
+    session.stage_spine_fact(
+        call_id,
+        origin,
+        SpineOperationFact::Spawn {
+            tasks: wave.tasks.clone(),
+            terminal_results: wave.receipt.results.clone(),
+        },
+    );
+    FunctionToolOutput::from_text(crate::spine::spawn::wave_tool_output(&wave), Some(true))
 }
 
 #[cfg(test)]
@@ -288,7 +339,7 @@ mod tests {
     }
 
     #[test]
-    fn plan_mode_suppresses_only_spawn() {
+    fn plan_mode_suppresses_spawn_and_collect() {
         assert_eq!(
             handlers(ModeKind::Plan)
                 .iter()

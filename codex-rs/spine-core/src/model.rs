@@ -149,7 +149,7 @@ pub enum SpawnValidationError {
 impl std::fmt::Display for SpawnValidationError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::TooFewTasks => f.write_str("spine.spawn requires at least two tasks"),
+            Self::TooFewTasks => f.write_str("spine.spawn requires at least one task"),
             Self::TooManyTasks { max, actual } => {
                 write!(f, "spine.spawn has {actual} tasks; maximum is {max}")
             }
@@ -215,7 +215,7 @@ impl SpawnReceipt {
     }
 
     pub fn validate_for(&self, tasks: &[SpawnTask]) -> Result<(), SpawnValidationError> {
-        if tasks.len() < 2 {
+        if tasks.is_empty() {
             return Err(SpawnValidationError::TooFewTasks);
         }
         if tasks.len() > crate::MAX_SPAWN_TASKS {

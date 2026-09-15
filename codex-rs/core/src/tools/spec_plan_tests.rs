@@ -342,7 +342,7 @@ async fn spine_tools_follow_feature_mode_and_source_boundaries() {
     .await;
     assert_eq!(
         enabled.namespace_function_names(spine_core::host::SPINE_NAMESPACE),
-        ["close", "next", "open", "spawn"]
+        ["close", "collect", "next", "open", "spawn"]
     );
     assert!(enabled.spine_owned_spec.is_some());
     for name in enabled.namespace_function_names(spine_core::host::SPINE_NAMESPACE) {
@@ -401,6 +401,8 @@ description = "{description}"
 [tools.next]
 description = "{description}"
 [tools.spawn]
+description = "{description}"
+[tools.collect]
 description = "{description}"
 "#
     );

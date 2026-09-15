@@ -197,6 +197,7 @@ struct DirectSpineResponseGroup {
 #[derive(Default)]
 struct DirectSpineResponseGroupState {
     spawn_calls: Vec<DirectSpineSpawnCall>,
+    collect_calls: Vec<String>,
     has_structural_control: bool,
     finished: bool,
 }
@@ -224,6 +225,14 @@ impl DirectSpineResponseGroup {
                     arguments,
                 });
             }
+            "collect"
+                if state
+                    .collect_calls
+                    .iter()
+                    .all(|candidate| candidate != &call.call_id) =>
+            {
+                state.collect_calls.push(call.call_id.clone());
+            }
             _ => {}
         }
     }
@@ -240,15 +249,19 @@ impl DirectSpineResponseGroup {
         call_id: &str,
         cancellation_token: &CancellationToken,
     ) -> Result<DirectSpineSpawnCall, String> {
-        let (spawn_calls, has_structural_control) = loop {
+        let (spawn_calls, collect_calls, has_structural_control) = loop {
             let changed = self.changed.notified();
             tokio::pin!(changed);
             changed.as_mut().enable();
             if let Some(group) = {
                 let state = self.state.lock().expect("direct Spine response group lock");
-                state
-                    .finished
-                    .then(|| (state.spawn_calls.clone(), state.has_structural_control))
+                state.finished.then(|| {
+                    (
+                        state.spawn_calls.clone(),
+                        state.collect_calls.clone(),
+                        state.has_structural_control,
+                    )
+                })
             } {
                 break group;
             }
@@ -266,6 +279,9 @@ impl DirectSpineResponseGroup {
                     .to_string(),
             );
         }
+        if !collect_calls.is_empty() {
+            return Err("spine.spawn cannot be mixed with spine.collect".to_string());
+        }
         if spawn_calls.len() > 1 {
             return Err("spine.spawn may be called at most once in one model response".to_string());
         }
@@ -274,6 +290,58 @@ impl DirectSpineResponseGroup {
             .find(|candidate| candidate.call_id == call_id)
             .ok_or_else(|| {
                 format!("spine.spawn call `{call_id}` is missing from its response group")
+            })
+    }
+
+    async fn collect_call(
+        &self,
+        call_id: &str,
+        cancellation_token: &CancellationToken,
+    ) -> Result<(), String> {
+        let (spawn_calls, collect_calls, has_structural_control) = loop {
+            let changed = self.changed.notified();
+            tokio::pin!(changed);
+            changed.as_mut().enable();
+            if let Some(group) = {
+                let state = self.state.lock().expect("direct Spine response group lock");
+                state.finished.then(|| {
+                    (
+                        state.spawn_calls.clone(),
+                        state.collect_calls.clone(),
+                        state.has_structural_control,
+                    )
+                })
+            } {
+                break group;
+            }
+            tokio::select! {
+                _ = changed => {}
+                _ = cancellation_token.cancelled() => {
+                    return Err("spine.collect was cancelled before response-group admission".to_string());
+                }
+            }
+        };
+
+        if has_structural_control {
+            return Err(
+                "spine.collect cannot be mixed with spine.open, spine.close, or spine.next"
+                    .to_string(),
+            );
+        }
+        if !spawn_calls.is_empty() {
+            return Err("spine.collect cannot be mixed with spine.spawn".to_string());
+        }
+        if collect_calls.len() > 1 {
+            return Err(
+                "spine.collect may be called at most once in one model response".to_string(),
+            );
+        }
+        collect_calls
+            .into_iter()
+            .find(|candidate| candidate == call_id)
+            .map(|_| ())
+            .ok_or_else(|| {
+                format!("spine.collect call `{call_id}` is missing from its response group")
             })
     }
 }
@@ -286,6 +354,16 @@ pub(crate) async fn await_current_spine_spawn_call(
         .try_with(|context| Arc::clone(&context.response_group))
         .map_err(|_| "spine.spawn is only available to direct model tool calls".to_string())?;
     group.spawn_call(call_id, cancellation_token).await
+}
+
+pub(crate) async fn await_current_spine_collect_call(
+    call_id: &str,
+    cancellation_token: &CancellationToken,
+) -> Result<(), String> {
+    let group = DIRECT_SPINE_DISPATCH
+        .try_with(|context| Arc::clone(&context.response_group))
+        .map_err(|_| "spine.collect is only available to direct model tool calls".to_string())?;
+    group.collect_call(call_id, cancellation_token).await
 }
 
 pub(crate) async fn provision_current_spine_control() -> Result<(), FunctionCallError> {
@@ -902,6 +980,72 @@ mod tests {
                 .spawn_call("spawn-1", &CancellationToken::new())
                 .await
                 .expect_err("mixed structural control should fail")
+                .contains("cannot be mixed")
+        );
+    }
+
+    #[tokio::test]
+    async fn direct_spine_response_group_enforces_collect_exclusivity() {
+        let collect_call = ToolCall {
+            tool_name: codex_tools::ToolName::namespaced(
+                spine_core::host::SPINE_NAMESPACE,
+                "collect",
+            ),
+            call_id: "collect-1".to_string(),
+            payload: ToolPayload::Function {
+                arguments: r#"{"wait":"next"}"#.to_string(),
+            },
+            encrypted_function_args: None,
+        };
+        let spawn_call = ToolCall {
+            tool_name: codex_tools::ToolName::namespaced(
+                spine_core::host::SPINE_NAMESPACE,
+                "spawn",
+            ),
+            call_id: "spawn-1".to_string(),
+            payload: ToolPayload::Function {
+                arguments: r#"{"tasks":[]}"#.to_string(),
+            },
+            encrypted_function_args: None,
+        };
+        let structural = ToolCall {
+            tool_name: codex_tools::ToolName::namespaced(spine_core::host::SPINE_NAMESPACE, "open"),
+            call_id: "open-1".to_string(),
+            payload: ToolPayload::Function {
+                arguments: r#"{"summary":"task"}"#.to_string(),
+            },
+            encrypted_function_args: None,
+        };
+
+        let valid = DirectSpineResponseGroup::default();
+        valid.register(&collect_call);
+        valid.finish();
+        valid
+            .collect_call("collect-1", &CancellationToken::new())
+            .await
+            .expect("single collect should be admitted");
+
+        let mixed_spawn = DirectSpineResponseGroup::default();
+        mixed_spawn.register(&collect_call);
+        mixed_spawn.register(&spawn_call);
+        mixed_spawn.finish();
+        assert!(
+            mixed_spawn
+                .collect_call("collect-1", &CancellationToken::new())
+                .await
+                .expect_err("collect mixed with spawn should fail")
+                .contains("cannot be mixed")
+        );
+
+        let mixed_open = DirectSpineResponseGroup::default();
+        mixed_open.register(&collect_call);
+        mixed_open.register(&structural);
+        mixed_open.finish();
+        assert!(
+            mixed_open
+                .collect_call("collect-1", &CancellationToken::new())
+                .await
+                .expect_err("collect mixed with open should fail")
                 .contains("cannot be mixed")
         );
     }

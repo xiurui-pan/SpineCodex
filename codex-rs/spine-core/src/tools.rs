@@ -37,6 +37,7 @@ pub enum SpineTool {
     Close,
     Next,
     Spawn,
+    Collect,
 }
 
 impl SpineTool {
@@ -46,6 +47,7 @@ impl SpineTool {
             Self::Close => "close",
             Self::Next => "next",
             Self::Spawn => "spawn",
+            Self::Collect => "collect",
         }
     }
 
@@ -56,12 +58,18 @@ impl SpineTool {
     pub const fn feature(self) -> Feature {
         match self {
             Self::Open | Self::Close | Self::Next => Feature::Jit,
-            Self::Spawn => Feature::Spawn,
+            Self::Spawn | Self::Collect => Feature::Spawn,
         }
     }
 
-    pub const fn all() -> [Self; 4] {
-        [Self::Open, Self::Close, Self::Next, Self::Spawn]
+    pub const fn all() -> [Self; 5] {
+        [
+            Self::Open,
+            Self::Close,
+            Self::Next,
+            Self::Spawn,
+            Self::Collect,
+        ]
     }
 }
 
@@ -97,8 +105,9 @@ impl ToolCatalog {
 
     pub fn with_spawn_max_items(mut self, max_items: usize) -> Self {
         if max_items < 2 {
-            self.definitions
-                .retain(|definition| definition.tool != SpineTool::Spawn);
+            self.definitions.retain(|definition| {
+                !matches!(definition.tool, SpineTool::Spawn | SpineTool::Collect)
+            });
             return self;
         }
 
@@ -153,12 +162,26 @@ pub enum ToolValidation {
     Transition(ValidatedTransition),
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CollectWait {
+    Next,
+    All,
+}
+
+impl Default for CollectWait {
+    fn default() -> Self {
+        Self::Next
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum ValidatedTransition {
     Open { summary: String },
     Close { memory: String },
     Next { summary: String, memory: String },
     Spawn { tasks: Vec<SpawnTask> },
+    Collect { wait: CollectWait },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -171,6 +194,7 @@ pub enum ToolValidationError {
         max_bytes: usize,
     },
     InvalidSpawn(String),
+    InvalidCollect(String),
 }
 
 impl fmt::Display for ToolValidationError {
@@ -187,6 +211,9 @@ impl fmt::Display for ToolValidationError {
             }
             Self::InvalidSpawn(error) => {
                 write!(formatter, "invalid spine.spawn arguments: {error}")
+            }
+            Self::InvalidCollect(error) => {
+                write!(formatter, "invalid spine.collect arguments: {error}")
             }
         }
     }
@@ -256,6 +283,22 @@ fn validate_tool_with_spawn_limit(
                 tasks: args.tasks,
             }))
         }
+        SpineTool::Collect => {
+            let arguments = if arguments.trim().is_empty() {
+                "{}"
+            } else {
+                arguments
+            };
+            let args: CollectArgs = parse_control(arguments).map_err(|error| match error {
+                ToolValidationError::InvalidJson(message) => {
+                    ToolValidationError::InvalidCollect(message)
+                }
+                other => other,
+            })?;
+            Ok(ToolValidation::Transition(ValidatedTransition::Collect {
+                wait: args.wait,
+            }))
+        }
     }
 }
 
@@ -264,7 +307,7 @@ pub const fn success_carrier(tool: SpineTool) -> Option<&'static str> {
         SpineTool::Open => Some("Spine open accepted."),
         SpineTool::Close => Some("Spine close accepted."),
         SpineTool::Next => Some("Spine next accepted."),
-        SpineTool::Spawn => None,
+        SpineTool::Spawn | SpineTool::Collect => None,
     }
 }
 
@@ -293,6 +336,13 @@ struct NextArgs {
 #[serde(deny_unknown_fields)]
 struct SpawnArgs {
     tasks: Vec<SpawnTask>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CollectArgs {
+    #[serde(default)]
+    wait: CollectWait,
 }
 
 fn parse_control<T: for<'de> Deserialize<'de>>(arguments: &str) -> Result<T, ToolValidationError> {
@@ -357,6 +407,17 @@ fn parameters_for(tool: SpineTool) -> Value {
                 }
             },
             "required": ["tasks"],
+            "additionalProperties": false
+        }),
+        SpineTool::Collect => serde_json::json!({
+            "type": "object",
+            "properties": {
+                "wait": {
+                    "type": "string",
+                    "enum": ["next", "all"],
+                    "description": "How many remaining branches to harvest. `next` (default) returns as soon as at least one remaining branch is terminal, including any that already finished. `all` waits until every remaining branch is terminal."
+                }
+            },
             "additionalProperties": false
         }),
     }
@@ -435,6 +496,59 @@ mod tests {
     }
 
     #[test]
+    fn spawn_catalog_includes_collect() {
+        let config = SpineConfig::v1()
+            .with_features([Feature::Jit, Feature::Spawn])
+            .unwrap();
+        let catalog = ToolCatalog::new(&config).unwrap();
+        assert_eq!(
+            catalog.names(),
+            [
+                "spine.open",
+                "spine.close",
+                "spine.next",
+                "spine.spawn",
+                "spine.collect"
+            ]
+        );
+    }
+
+    #[test]
+    fn collect_accepts_empty_args_and_wait_modes() {
+        assert_eq!(
+            validate_tool(SpineTool::Collect, ""),
+            Ok(ToolValidation::Transition(ValidatedTransition::Collect {
+                wait: CollectWait::Next,
+            }))
+        );
+        assert_eq!(
+            validate_tool(SpineTool::Collect, "{}"),
+            Ok(ToolValidation::Transition(ValidatedTransition::Collect {
+                wait: CollectWait::Next,
+            }))
+        );
+        assert_eq!(
+            validate_tool(SpineTool::Collect, r#"{"wait":"next"}"#),
+            Ok(ToolValidation::Transition(ValidatedTransition::Collect {
+                wait: CollectWait::Next,
+            }))
+        );
+        assert_eq!(
+            validate_tool(SpineTool::Collect, r#"{"wait":"all"}"#),
+            Ok(ToolValidation::Transition(ValidatedTransition::Collect {
+                wait: CollectWait::All,
+            }))
+        );
+        assert!(matches!(
+            validate_tool(SpineTool::Collect, r#"{"wait":"later"}"#),
+            Err(ToolValidationError::InvalidCollect(_))
+        ));
+        assert!(matches!(
+            validate_tool(SpineTool::Collect, r#"{"wait":"all","extra":true}"#),
+            Err(ToolValidationError::InvalidCollect(_))
+        ));
+    }
+
     fn spawn_schema_specialization_encodes_runtime_capacity() {
         let config = SpineConfig::v1()
             .with_features([Feature::Jit, Feature::Spawn])
@@ -454,6 +568,7 @@ mod tests {
             .unwrap();
         let catalog = ToolCatalog::new(&config).unwrap().with_spawn_max_items(1);
         assert!(catalog.definition(SpineTool::Spawn).is_none());
+        assert!(catalog.definition(SpineTool::Collect).is_none());
     }
 
     #[test]

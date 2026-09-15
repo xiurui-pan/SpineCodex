@@ -50,6 +50,7 @@ pub(crate) struct Session {
     /// Keep this separate from `state` so storage I/O does not block runtime state access.
     pub(super) thread_settings_persistence: Semaphore,
     pub(crate) spine_spawn_lifecycle: crate::spine::spawn::SpawnLifecycle,
+    pub(crate) spine_spawn_batch: crate::spine::spawn::SpawnBatchRegistry,
     /// Serializes rebuild/apply cycles for the running proxy; each cycle
     /// rebuilds from the current SessionState while holding this lock.
     pub(super) managed_network_proxy_refresh_lock: Semaphore,
@@ -1524,6 +1525,7 @@ impl Session {
                 state: Mutex::new(state),
                 thread_settings_persistence: Semaphore::new(/*permits*/ 1),
                 spine_spawn_lifecycle: Default::default(),
+                spine_spawn_batch: Default::default(),
                 managed_network_proxy_refresh_lock: Semaphore::new(/*permits*/ 1),
                 features: config.features.clone(),
                 windows_sandbox_proxy_settings_mode,

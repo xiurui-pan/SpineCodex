@@ -346,3 +346,104 @@ fn missing_internal_result_fails_closed_as_an_errored_result() {
             .is_some_and(|diagnostic| diagnostic.contains("lost"))
     );
 }
+
+#[test]
+fn spawn_receipt_allows_a_single_task_delta() {
+    let tasks = vec![SpawnTask {
+        summary: "first".to_string(),
+        prompt: "first task".to_string(),
+    }];
+    let receipt = SpawnReceipt {
+        schema: SPINE_SPAWN_RESULT_SCHEMA.to_string(),
+        results: vec![SpawnResult {
+            ordinal: 0,
+            outcome: SpawnOutcome::Completed,
+            memory_body: "first memory".to_string(),
+            diagnostic: None,
+            execution_ref: Some("child-0".to_string()),
+        }],
+    };
+    receipt
+        .validate_for(&tasks)
+        .expect("one-task delta is valid");
+}
+
+#[test]
+fn wave_receipt_remaps_ordinals_in_completion_order() {
+    let tasks = tasks();
+    let completed = vec![
+        (
+            1,
+            SpawnResult {
+                ordinal: 1,
+                outcome: SpawnOutcome::Completed,
+                memory_body: "second memory".to_string(),
+                diagnostic: None,
+                execution_ref: Some("child-1".to_string()),
+            },
+        ),
+        (
+            0,
+            SpawnResult {
+                ordinal: 0,
+                outcome: SpawnOutcome::Completed,
+                memory_body: "first memory".to_string(),
+                diagnostic: None,
+                execution_ref: Some("child-0".to_string()),
+            },
+        ),
+    ];
+    let (wave_tasks, receipt) = wave_receipt(&tasks, completed).unwrap();
+    assert_eq!(
+        wave_tasks
+            .iter()
+            .map(|task| task.summary.as_str())
+            .collect::<Vec<_>>(),
+        ["compatibility", "parser"]
+    );
+    assert_eq!(
+        receipt
+            .results
+            .iter()
+            .map(|result| (result.ordinal, result.memory_body.as_str()))
+            .collect::<Vec<_>>(),
+        [(0, "second memory"), (1, "first memory")]
+    );
+}
+
+#[test]
+fn wave_tool_output_reports_settled_and_pending() {
+    let wave = SpawnWave {
+        spawn_call_id: "spawn-call".to_string(),
+        tasks: vec![SpawnTask {
+            summary: "fast".to_string(),
+            prompt: "fast task".to_string(),
+        }],
+        receipt: SpawnReceipt {
+            schema: SPINE_SPAWN_RESULT_SCHEMA.to_string(),
+            results: vec![SpawnResult {
+                ordinal: 0,
+                outcome: SpawnOutcome::Completed,
+                memory_body: "fast memory".to_string(),
+                diagnostic: None,
+                execution_ref: Some("child-0".to_string()),
+            }],
+        },
+        pending_summaries: vec!["slow".to_string()],
+        complete: false,
+    };
+    let output: serde_json::Value = serde_json::from_str(&wave_tool_output(&wave)).unwrap();
+    assert_eq!(
+        output,
+        serde_json::json!({
+            "status": "success",
+            "complete": false,
+            "pending": ["slow"],
+            "settled": [{
+                "summary": "fast",
+                "outcome": "completed",
+                "memory": "fast memory",
+            }],
+        })
+    );
+}

@@ -372,6 +372,25 @@ async fn embedded_spine_spawn_streams_tree_activity_and_retires_children() -> Re
         .set_delay(Duration::from_millis(50)),
     )
     .await;
+    let _parent_after_spawn = mount_sse_once_match(
+        &server,
+        |request: &wiremock::Request| {
+            body_contains(request, "second child final")
+                && !body_contains(request, "first child final")
+                && !body_contains(request, BRANCH_PROMPT_MARKER)
+        },
+        sse(vec![
+            ev_response_created("parent-collect-response"),
+            ev_function_call_with_namespace(
+                "tui-collect-call",
+                "spine",
+                "collect",
+                &json!({ "wait": "all" }).to_string(),
+            ),
+            ev_completed("parent-collect-response"),
+        ]),
+    )
+    .await;
     let parent_followup = mount_sse_once_match(
         &server,
         |request: &wiremock::Request| {
