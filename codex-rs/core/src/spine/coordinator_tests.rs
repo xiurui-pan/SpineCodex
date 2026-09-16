@@ -21,7 +21,6 @@ use codex_protocol::protocol::TokenUsageInfo;
 use pretty_assertions::assert_eq;
 use spine_core::host::ExecutionOrigin;
 use spine_core::host::Feature;
-use spine_core::host::RawBoundary;
 use spine_core::host::SOURCE_LEDGER_AUTO_COMPACT_LIMIT;
 use spine_core::host::SamplingTerminal;
 use spine_core::host::SpawnOutcome;
@@ -1537,14 +1536,9 @@ fn spine_compact_live_advances_the_epoch_atomically() {
 #[test]
 fn source_ledger_pressure_compacts_instead_of_faulting() {
     let mut coordinator = coordinator();
-    let characters: Vec<_> = (1..=SOURCE_LEDGER_AUTO_COMPACT_LIMIT as u64)
-        .map(|ordinal| SpineChar::Opaque {
-            boundary: RawBoundary(ordinal),
-        })
-        .collect();
+    let items = vec![message("user", "cell").into(); SOURCE_LEDGER_AUTO_COMPACT_LIMIT];
     coordinator
-        .runtime
-        .observe_source(characters)
+        .observe_response_items(&items)
         .expect("fill ledger to compact limit");
     assert!(coordinator.source_ledger_needs_auto_compact());
 
