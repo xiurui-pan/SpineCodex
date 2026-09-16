@@ -21,6 +21,8 @@ use codex_protocol::protocol::TokenUsageInfo;
 use pretty_assertions::assert_eq;
 use spine_core::host::ExecutionOrigin;
 use spine_core::host::Feature;
+use spine_core::host::RawBoundary;
+use spine_core::host::SOURCE_LEDGER_AUTO_COMPACT_LIMIT;
 use spine_core::host::SamplingTerminal;
 use spine_core::host::SpawnOutcome;
 use spine_core::host::SpawnResult;
@@ -1530,6 +1532,51 @@ fn spine_compact_live_advances_the_epoch_atomically() {
             .iter()
             .any(|node| { node.status == spine_core::host::NodeStatus::Compacted })
     );
+}
+
+#[test]
+fn source_ledger_pressure_compacts_instead_of_faulting() {
+    let mut coordinator = coordinator();
+    let characters: Vec<_> = (1..=SOURCE_LEDGER_AUTO_COMPACT_LIMIT as u64)
+        .map(|ordinal| SpineChar::Opaque {
+            boundary: RawBoundary(ordinal),
+        })
+        .collect();
+    coordinator
+        .runtime
+        .observe_source(characters)
+        .expect("fill ledger to compact limit");
+    assert!(coordinator.source_ledger_needs_auto_compact());
+
+    let replacement = [message("assistant", "compact summary")];
+    let prepared = coordinator
+        .prepare_compact(
+            &replacement
+                .iter()
+                .cloned()
+                .map(Into::into)
+                .collect::<Vec<_>>(),
+        )
+        .expect("prepare compact at ledger pressure");
+    coordinator.install_compact(prepared);
+    assert!(!coordinator.source_ledger_needs_auto_compact());
+    assert_eq!(
+        coordinator.runtime.epoch(),
+        spine_core::host::ContextEpoch::ZERO
+            .checked_next()
+            .expect("successor epoch")
+    );
+
+    coordinator
+        .observe_response_items(
+            &[message("user", "after compact")]
+                .iter()
+                .cloned()
+                .map(Into::into)
+                .collect::<Vec<_>>(),
+        )
+        .expect("append after compact");
+    assert!(!coordinator.source_ledger_needs_auto_compact());
 }
 
 #[test]

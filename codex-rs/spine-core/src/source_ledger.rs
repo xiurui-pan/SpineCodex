@@ -16,6 +16,9 @@ use thiserror::Error;
 
 pub const MAX_SOURCE_CELLS: usize = crate::MAX_VISIBLE_CONTEXT_ITEMS;
 pub const MAX_SOURCE_SNAPSHOT_BYTES: usize = crate::MAX_RAW_EVENT_BYTES;
+/// Compact at 90% of the hard cap so a live sampling still has headroom to
+/// observe new source cells before `TooManyCells` latches a durability fault.
+pub const SOURCE_LEDGER_AUTO_COMPACT_LIMIT: usize = (MAX_SOURCE_CELLS * 9) / 10;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SourceLedger {
@@ -105,6 +108,14 @@ impl SourceLedger {
 
     pub fn digest(&self) -> &RecordDigest {
         &self.digest
+    }
+
+    pub fn cell_count(&self) -> usize {
+        self.cells.len()
+    }
+
+    pub fn needs_auto_compact(&self) -> bool {
+        self.cell_count() >= SOURCE_LEDGER_AUTO_COMPACT_LIMIT
     }
 
     pub fn snapshot(&self) -> SourceSnapshot {
@@ -302,6 +313,10 @@ fn native_item(boundary: RawBoundary) -> ContextItem {
         source: NativeItemRef::Rollout { ordinal: boundary },
     }
 }
+
+#[cfg(test)]
+#[path = "source_ledger_tests.rs"]
+mod tests;
 
 fn digest_cells(cells: &[SourceCell]) -> Result<RecordDigest, SourceLedgerError> {
     let encoded = serde_json::to_vec(cells)

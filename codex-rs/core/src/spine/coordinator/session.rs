@@ -273,6 +273,12 @@ impl Session {
         self.with_spine_coordinator(|coordinator| coordinator.latch_durability_fault(reason));
     }
 
+    pub(crate) fn source_ledger_needs_auto_compact(&self) -> bool {
+        self.lock_spine_coordinator()
+            .as_ref()
+            .is_some_and(CodexSpineCoordinator::source_ledger_needs_auto_compact)
+    }
+
     pub(crate) fn latch_spine_error(&self, error: anyhow::Error) -> anyhow::Error {
         self.latch_spine_durability_fault(error.to_string());
         error

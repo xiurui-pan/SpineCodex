@@ -98,6 +98,10 @@ impl SamplingPlanner {
         self.source.snapshot()
     }
 
+    pub fn source_ledger_needs_auto_compact(&self) -> bool {
+        self.source.needs_auto_compact()
+    }
+
     /// Builds the current source-only context view without advancing durable sampling state.
     ///
     /// JIT hosts need the live projection of ordinary source items before the next real stream

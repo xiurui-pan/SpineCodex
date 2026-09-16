@@ -112,6 +112,10 @@ impl SamplingRuntime {
         self.planner.source_snapshot()
     }
 
+    pub fn source_ledger_needs_auto_compact(&self) -> bool {
+        self.planner.source_ledger_needs_auto_compact()
+    }
+
     pub fn preview_context_plan(&self) -> Result<crate::ContextPlanRecipe, PlannerError> {
         self.planner.preview_context_plan()
     }

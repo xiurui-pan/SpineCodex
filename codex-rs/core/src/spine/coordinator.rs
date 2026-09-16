@@ -432,6 +432,10 @@ impl CodexSpineCoordinator {
         }
     }
 
+    pub(crate) fn source_ledger_needs_auto_compact(&self) -> bool {
+        self.durability_fault.is_none() && self.runtime.source_ledger_needs_auto_compact()
+    }
+
     fn require_healthy(&self) -> Result<(), CoordinatorError> {
         if let Some(reason) = &self.durability_fault {
             return Err(CoordinatorError::DurabilityFaulted(reason.clone()));
