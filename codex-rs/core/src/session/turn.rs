@@ -486,6 +486,11 @@ pub(crate) async fn run_turn(
 
                 // as long as compaction works well in getting us way below the token limit, we shouldn't worry about being in an infinite loop.
                 if should_roll_over {
+                    let compaction_reason = if !token_limit_reached && source_ledger_needs_compact {
+                        CompactionReason::SourceLedgerLimit
+                    } else {
+                        CompactionReason::ContextLimit
+                    };
                     if let Err(err) = run_auto_compact(
                         &sess,
                         Arc::clone(&step_context),
@@ -495,7 +500,7 @@ pub(crate) async fn run_turn(
                             world_state: Arc::clone(&world_state),
                             step_context: Arc::clone(&step_context),
                         },
-                        CompactionReason::ContextLimit,
+                        compaction_reason,
                         CompactionPhase::MidTurn,
                     )
                     .await
@@ -1066,6 +1071,11 @@ pub(crate) async fn run_pre_sampling_compact(
     // Compact if the configured auto-compaction budget, usable context window,
     // or Spine source-ledger budget is exhausted.
     if token_status.token_limit_reached || sess.source_ledger_needs_auto_compact() {
+        let reason = if token_status.token_limit_reached {
+            CompactionReason::ContextLimit
+        } else {
+            CompactionReason::SourceLedgerLimit
+        };
         // Pre-turn compaction runs before run_turn creates the normal sampling step.
         let step_context = sess
             .capture_step_context(Arc::clone(turn_context), cancellation_token)
@@ -1076,7 +1086,7 @@ pub(crate) async fn run_pre_sampling_compact(
             /*fallback_step_context*/ None,
             client_session,
             InitialContextInjection::DoNotInject,
-            CompactionReason::ContextLimit,
+            reason,
             CompactionPhase::PreTurn,
         )
         .await?;
