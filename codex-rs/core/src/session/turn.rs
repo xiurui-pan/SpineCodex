@@ -473,7 +473,8 @@ pub(crate) async fn run_turn(
 
                 let should_roll_over = needs_follow_up
                     && (sess.take_new_context_window_request().await
-                        || token_status.should_auto_compact(source_ledger_needs_compact));
+                        || token_status.token_limit_reached
+                        || source_ledger_needs_compact);
                 let allow_auto_compact_fallback = !should_roll_over && !token_limit_reached;
                 super::token_budget::maybe_record(
                     sess.as_ref(),
@@ -1064,7 +1065,7 @@ async fn run_pre_sampling_compact(
             .await;
     // Compact if the configured auto-compaction budget, usable context window,
     // or Spine source-ledger budget is exhausted.
-    if token_status.should_auto_compact(sess.source_ledger_needs_auto_compact()) {
+    if token_status.token_limit_reached || sess.source_ledger_needs_auto_compact() {
         // Pre-turn compaction runs before run_turn creates the normal sampling step.
         let step_context = sess
             .capture_step_context(Arc::clone(turn_context), cancellation_token)

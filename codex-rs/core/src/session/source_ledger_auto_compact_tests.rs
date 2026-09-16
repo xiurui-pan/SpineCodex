@@ -33,5 +33,4 @@ async fn source_ledger_pressure_requests_auto_compact_while_tokens_remain() {
         "ledger pressure must not depend on the token window"
     );
     assert!(session.source_ledger_needs_auto_compact());
-    assert!(token_status.should_auto_compact(session.source_ledger_needs_auto_compact()));
 }

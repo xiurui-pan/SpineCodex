@@ -18,12 +18,6 @@ pub(crate) struct ContextWindowTokenStatus {
     pub(crate) token_limit_reached: bool,
 }
 
-impl ContextWindowTokenStatus {
-    pub(crate) fn should_auto_compact(&self, source_ledger_needs_compact: bool) -> bool {
-        self.token_limit_reached || source_ledger_needs_compact
-    }
-}
-
 fn tokens_remaining(limit: Option<i64>, used: i64) -> Option<i64> {
     limit.map(|limit| limit.saturating_sub(used).max(0))
 }

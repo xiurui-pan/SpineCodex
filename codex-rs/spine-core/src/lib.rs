@@ -136,7 +136,6 @@ pub mod host {
     pub use super::sampling_runtime::SamplingFinish;
     pub use super::sampling_runtime::SamplingRuntime;
     pub use super::sampling_runtime::SamplingTerminal;
-    pub use super::source_ledger::MAX_SOURCE_CELLS;
     pub use super::source_ledger::SOURCE_LEDGER_AUTO_COMPACT_LIMIT;
     pub use super::source_ledger::SourceLedger;
     pub use super::status::ContextPressureProblem;
