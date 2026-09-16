@@ -13311,3 +13311,6 @@ async fn session_start_hooks_require_project_trust_without_config_toml() -> std:
 
 #[path = "compaction_checkpoint_tests.rs"]
 mod compaction_checkpoint;
+
+#[path = "source_ledger_auto_compact_tests.rs"]
+mod source_ledger_auto_compact;

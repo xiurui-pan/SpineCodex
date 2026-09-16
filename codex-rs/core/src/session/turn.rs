@@ -436,6 +436,7 @@ pub(crate) async fn run_turn(
                 .await;
                 let needs_follow_up = model_needs_follow_up || has_pending_input;
                 let token_limit_reached = token_status.token_limit_reached;
+                let source_ledger_needs_compact = sess.source_ledger_needs_auto_compact();
 
                 trace!(
                     turn_id = %turn_context.sub_id,
@@ -447,6 +448,7 @@ pub(crate) async fn run_turn(
                     full_context_window_limit = ?token_status.full_context_window_limit,
                     full_context_window_limit_reached = token_status.full_context_window_limit_reached,
                     token_limit_reached,
+                    source_ledger_needs_compact,
                     model_needs_follow_up,
                     has_pending_input,
                     needs_follow_up,
@@ -470,7 +472,9 @@ pub(crate) async fn run_turn(
                 }
 
                 let should_roll_over = needs_follow_up
-                    && (sess.take_new_context_window_request().await || token_limit_reached);
+                    && (sess.take_new_context_window_request().await
+                        || token_limit_reached
+                        || source_ledger_needs_compact);
                 let allow_auto_compact_fallback = !should_roll_over && !token_limit_reached;
                 super::token_budget::maybe_record(
                     sess.as_ref(),
@@ -482,6 +486,11 @@ pub(crate) async fn run_turn(
 
                 // as long as compaction works well in getting us way below the token limit, we shouldn't worry about being in an infinite loop.
                 if should_roll_over {
+                    let compaction_reason = if !token_limit_reached && source_ledger_needs_compact {
+                        CompactionReason::SourceLedgerLimit
+                    } else {
+                        CompactionReason::ContextLimit
+                    };
                     if let Err(err) = run_auto_compact(
                         &sess,
                         Arc::clone(&step_context),
@@ -491,7 +500,7 @@ pub(crate) async fn run_turn(
                             world_state: Arc::clone(&world_state),
                             step_context: Arc::clone(&step_context),
                         },
-                        CompactionReason::ContextLimit,
+                        compaction_reason,
                         CompactionPhase::MidTurn,
                     )
                     .await
@@ -1048,7 +1057,7 @@ async fn track_turn_resolved_config_analytics(
 }
 
 #[instrument(level = "trace", skip_all)]
-async fn run_pre_sampling_compact(
+pub(crate) async fn run_pre_sampling_compact(
     sess: &Arc<Session>,
     turn_context: &Arc<TurnContext>,
     client_session: &mut ModelClientSession,
@@ -1059,8 +1068,14 @@ async fn run_pre_sampling_compact(
     let token_status =
         super::context_window::context_window_token_status(sess.as_ref(), turn_context.as_ref())
             .await;
-    // Compact if the configured auto-compaction budget or usable context window is exhausted.
-    if token_status.token_limit_reached {
+    // Compact if the configured auto-compaction budget, usable context window,
+    // or Spine source-ledger budget is exhausted.
+    if token_status.token_limit_reached || sess.source_ledger_needs_auto_compact() {
+        let reason = if token_status.token_limit_reached {
+            CompactionReason::ContextLimit
+        } else {
+            CompactionReason::SourceLedgerLimit
+        };
         // Pre-turn compaction runs before run_turn creates the normal sampling step.
         let step_context = sess
             .capture_step_context(Arc::clone(turn_context), cancellation_token)
@@ -1071,7 +1086,7 @@ async fn run_pre_sampling_compact(
             /*fallback_step_context*/ None,
             client_session,
             InitialContextInjection::DoNotInject,
-            CompactionReason::ContextLimit,
+            reason,
             CompactionPhase::PreTurn,
         )
         .await?;
