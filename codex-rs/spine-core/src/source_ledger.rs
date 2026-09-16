@@ -110,7 +110,7 @@ impl SourceLedger {
         &self.digest
     }
 
-    pub fn cell_count(&self) -> usize {
+    fn cell_count(&self) -> usize {
         self.cells.len()
     }
 
