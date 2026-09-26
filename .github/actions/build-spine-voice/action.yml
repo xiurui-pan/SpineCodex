@@ -1,0 +1,134 @@
+name: Build Spine voice runtime
+description: Build and seal the same-commit native voice runtime using upstream tooling.
+inputs:
+  target:
+    description: Native application release target.
+    required: true
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+      with:
+        python-version: "3.12"
+        architecture: ${{ startsWith(inputs.target, 'aarch64') && 'arm64' || 'x64' }}
+    - uses: bazel-contrib/setup-bazel@c5acdfb288317d0b5c0bbd7a396a3dc868bb0f86 # 0.19.0
+      if: runner.os != 'Windows'
+      with:
+        bazelisk-version: 1.28.1
+    - name: Build Unix runtime and helper
+      if: runner.os != 'Windows'
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      run: bazel build -c opt --jobs=4 //codex-rs/voice-host:codex-voice-host //third_party/voice:native_runtime
+    - name: Prepare Bazel CI
+      if: runner.os == 'Windows'
+      uses: ./.github/actions/prepare-bazel-ci
+      with:
+        target: ${{ inputs.target }}
+        cache-scope: release-voice-windows
+    - uses: ./.github/actions/setup-msvc-env
+      if: runner.os == 'Windows'
+      with:
+        target: ${{ inputs.target }}
+    - name: Refresh Bazel PATH for the selected MSVC target
+      if: runner.os == 'Windows'
+      shell: pwsh
+      working-directory: ${{ github.workspace }}
+      run: ./.github/scripts/compute-bazel-windows-path.ps1
+    - name: Download pinned Windows build inputs
+      if: runner.os == 'Windows'
+      shell: pwsh
+      working-directory: ${{ github.workspace }}
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        $manifest = Get-Content -Raw .github/scripts/voice-cygwin-snapshot.json | ConvertFrom-Json
+        $pin = $manifest.archive
+        $source = $manifest.sourceArchive
+        $directory = Join-Path $env:RUNNER_TEMP "voice-cygwin-snapshot"
+        New-Item -ItemType Directory -Path $directory | Out-Null
+        gh release download $pin.tag --repo openai/codex --pattern $pin.name --pattern $source.name --dir $directory
+        if ($LASTEXITCODE -ne 0) { throw "Cannot obtain the public Cygwin inputs and source" }
+        $sourceFile = Join-Path $directory $source.name
+        if ((Get-Item $sourceFile).Length -ne $source.bytes -or
+            (Get-FileHash $sourceFile -Algorithm SHA256).Hash.ToLowerInvariant() -ne $source.sha256) {
+          throw "Public Cygwin source archive mismatch"
+        }
+        "VOICE_CYGWIN_ARCHIVE=$(Join-Path $directory $pin.name)" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+    - name: Verify and install pinned public build tools
+      if: runner.os == 'Windows'
+      shell: pwsh
+      working-directory: ${{ github.workspace }}
+      run: |
+        & ./.github/scripts/setup-voice-windows.ps1 -Target "${{ inputs.target }}" -SnapshotArchive $env:VOICE_CYGWIN_ARCHIVE
+        if (-not $env:SystemRoot) { throw "Windows SystemRoot is required for native audio actions" }
+        "VOICE_WINDOWS_SYSTEM_ROOT=$env:SystemRoot" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+        $hostArch = $env:PROCESSOR_ARCHITEW6432
+        if (-not $hostArch) { $hostArch = $env:PROCESSOR_ARCHITECTURE }
+        if (-not $hostArch) { throw "Windows host architecture is required" }
+        "VOICE_WINDOWS_HOST_ARCH=$hostArch" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+    - name: Build same-commit native runtime and helper
+      if: runner.os == 'Windows'
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        ARCH: ${{ startsWith(inputs.target, 'aarch64') && 'aarch64' || 'x86_64' }}
+        VOICE_ARCH: ${{ startsWith(inputs.target, 'aarch64') && 'aarch64' || 'x86_64' }}
+        # Avoid Java JIT crashes in the Windows ARM64 voice build.
+        BAZEL_HOST_JVM_ARG: ${{ startsWith(inputs.target, 'aarch64') && '-Xint' || '' }}
+        BUILDBUDDY_API_KEY: ""
+      run: |
+        set -euo pipefail
+        python .github/scripts/watch_voice_bazel.py "$(cygpath -w "$BASH")" ./.github/scripts/run-bazel-ci.sh \
+          --remote-download-toplevel \
+          --print-failed-action-summary \
+          --windows-msvc-host-platform \
+          -- \
+          test -c opt --jobs=4 \
+          --platforms=//:local_windows_msvc \
+          --extra_toolchains=@local_config_cc//:cc-toolchain-x64_windows,@local_config_cc//:cc-toolchain-arm64_windows,//third_party/voice:windows_pkg_config_toolchain,//third_party/voice:windows_cmake_toolchain \
+          --repo_env=BAZEL_DO_NOT_DETECT_CPP_TOOLCHAIN=0 \
+          --repo_env=BAZEL_MSVC_RUNTIME_VISUAL_STUDIO_EULA=1 \
+          --inject_repository="voice_windows_tools=$VOICE_WINDOWS_BAZEL_REPOSITORY" \
+          --//third_party/voice:windows_installed_tools=@voice_windows_tools//:tools \
+          --action_env="SystemRoot=$VOICE_WINDOWS_SYSTEM_ROOT" \
+          --host_action_env="SystemRoot=$VOICE_WINDOWS_SYSTEM_ROOT" \
+          --action_env="PROCESSOR_ARCHITECTURE=$VOICE_WINDOWS_HOST_ARCH" \
+          --host_action_env="PROCESSOR_ARCHITECTURE=$VOICE_WINDOWS_HOST_ARCH" \
+          --output_groups=default,receipt,sdk \
+          --workspace_status_command=./scripts/workspace-status.cmd \
+          --build_metadata=COMMIT_SHA="$GITHUB_SHA" \
+          -- \
+          "//third_party/voice:native_runtime_windows_$ARCH" \
+          @rules_rust//cargo/private/cargo_build_script_runner:test \
+          //codex-rs/voice-host:codex-voice-host
+    - name: Stage and seal native runtime
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        APP_TARGET: ${{ inputs.target }}
+      run: |
+        set -euo pipefail
+        voice_target="$APP_TARGET"
+        case "$APP_TARGET" in
+          *-unknown-linux-musl) voice_target="${APP_TARGET%-musl}-gnu"; prefix=linux ;;
+          *-apple-darwin) prefix=macos ;;
+          *-pc-windows-msvc) prefix=windows ;;
+        esac
+        arch="${APP_TARGET%%-*}"
+        suffix=""
+        if [[ "$prefix" == windows ]]; then suffix=.exe; fi
+        source="bazel-bin/third_party/voice/native_runtime_${prefix}_${arch}"
+        output="${RUNNER_TEMP}/spine-voice/${APP_TARGET}"
+        mkdir -p "$output"
+        python third_party/voice/release_runtime.py stage \
+          --target "$voice_target" --source "$source" --output "$output/runtime"
+        cp "bazel-bin/codex-rs/voice-host/codex-voice-host${suffix}" "$output/codex-voice-host${suffix}"
+        chmod -R u+w "$output"
+        if [[ "$prefix" == windows ]]; then
+          python third_party/voice/windows_crt.py --root "$output/runtime" \
+            --target "$voice_target" --helper "$output/codex-voice-host.exe"
+        else
+          chmod 0755 "$output/codex-voice-host"
+        fi
+        python third_party/voice/release_runtime.py seal --target "$voice_target" --output "$output/runtime"

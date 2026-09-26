@@ -1,7 +1,10 @@
 ---
 source: tui/src/chatwidget/tests/slash_commands.rs
+assertion_line: 137
 expression: popup
 ---
+› /spine-tree  show the current Spine tree
+
 › /spine
 
-  /spine-tree  show the current Spine tree
+  GPT-5.6-Sol default · /tmp/project

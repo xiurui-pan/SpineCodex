@@ -2832,6 +2832,7 @@ mod tests {
                     plugin_id: None,
                     script_path: None,
                     command: "printf typed".to_string(),
+                    model_context: None,
                     cwd: codex_utils_path_uri::LegacyAppPathString::from_path(
                         std::path::Path::new("/tmp"),
                     ),

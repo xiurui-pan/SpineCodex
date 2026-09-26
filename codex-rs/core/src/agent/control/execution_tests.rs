@@ -1,4 +1,4 @@
-use crate::agent::AgentControl;
+use crate::agent::LocalAgentControl;
 use codex_protocol::AgentPath;
 use codex_protocol::error::CodexErrorDetails;
 use codex_protocol::protocol::MultiAgentVersion;
@@ -6,9 +6,12 @@ use codex_protocol::protocol::SessionSource;
 use codex_protocol::protocol::SubAgentSource;
 use pretty_assertions::assert_eq;
 
-fn control_with_limit(max_threads: usize) -> AgentControl {
-    let control = AgentControl::default();
-    control.agent_execution_limiter.initialize(max_threads);
+fn control_with_limit(max_threads: usize) -> LocalAgentControl {
+    let control = LocalAgentControl::default();
+    control
+        .runtime
+        .agent_execution_limiter
+        .initialize(max_threads);
     control
 }
 
@@ -17,6 +20,7 @@ fn execution_guards_count_active_v2_subagent_turns() {
     let control = control_with_limit(/*max_threads*/ 1);
     // Child role configs cannot replace the root-derived session limit.
     control
+        .runtime
         .agent_execution_limiter
         .initialize(/*max_threads*/ 2);
     let source = SessionSource::SubAgent(SubAgentSource::Other("worker".to_string()));
@@ -62,8 +66,11 @@ fn execution_guards_ignore_root_and_v1_turns() {
 
 #[test]
 fn spine_batch_reservations_are_atomic_and_claimed_by_agent_path() {
-    let control = AgentControl::default();
-    control.spine_spawn_limiter.initialize(/*max_threads*/ 2);
+    let control = LocalAgentControl::default();
+    control
+        .runtime
+        .spine_spawn_limiter
+        .initialize(/*max_threads*/ 2);
     let mut reservations = control
         .reserve_spine_spawn_slots(/*count*/ 2)
         .expect("entire batch should reserve");
@@ -102,7 +109,10 @@ fn spine_batch_reservations_are_atomic_and_claimed_by_agent_path() {
 #[test]
 fn spine_capacity_is_independent_from_native_v2_capacity() {
     let control = control_with_limit(/*max_threads*/ 0);
-    control.spine_spawn_limiter.initialize(/*max_threads*/ 1);
+    control
+        .runtime
+        .spine_spawn_limiter
+        .initialize(/*max_threads*/ 1);
     assert_eq!(
         control
             .reserve_spine_spawn_slots(/*count*/ 1)

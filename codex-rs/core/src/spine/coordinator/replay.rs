@@ -183,6 +183,7 @@ impl CodexSpineCoordinator {
                 | RolloutItem::InterAgentCommunicationMetadata { .. }
                 | RolloutItem::TurnContext(_)
                 | RolloutItem::TokenUsageRecord(_)
+                | RolloutItem::RetainedContext(_)
                 | RolloutItem::SecurityRiskScore(_)
                 | RolloutItem::RealtimeItem(_)
                 | RolloutItem::WorldState(_)

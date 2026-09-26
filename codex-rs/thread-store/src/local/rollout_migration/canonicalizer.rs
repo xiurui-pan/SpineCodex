@@ -294,6 +294,7 @@ impl LegacyRolloutCanonicalizer {
             | RolloutItem::TurnContext(_)
             | RolloutItem::TokenUsageRecord(_)
             | RolloutItem::RealtimeItem(_)
+            | RolloutItem::RetainedContext(_)
             | RolloutItem::SecurityRiskScore(_)
             | RolloutItem::WorldState(_)
             | RolloutItem::SpineSamplingStarted(_)
@@ -349,6 +350,7 @@ impl LegacyRolloutCanonicalizer {
             timestamp,
             RolloutItem::EventMsg(EventMsg::TurnStarted(TurnStartedEvent {
                 turn_id,
+                root_turn_id: None,
                 trace_id: None,
                 started_at: Some(started_at),
                 model_context_window: None,

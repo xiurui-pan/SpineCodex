@@ -441,6 +441,7 @@ max_concurrent_threads_per_session = 3
     while app_event_rx.try_recv().is_ok() {}
 
     let turn = AppCommand::user_turn(
+        uuid::Uuid::new_v4().to_string(),
         vec![UserInput::Text {
             text: PARENT_PROMPT.to_string(),
             text_elements: Vec::new(),

@@ -29,7 +29,8 @@ def main() -> None:
     args = parser.parse_args()
 
     workspace_root = Path(__file__).resolve().parents[2]
-    schema_root = args.schema_root or workspace_root / "app-server-protocol" / "schema"
+    repository_schema_root = workspace_root / "app-server-protocol" / "schema"
+    schema_root = args.schema_root or repository_schema_root
 
     env = os.environ.copy()
     env["CODEX_APP_SERVER_SCHEMA_ROOT"] = str(schema_root)
@@ -39,20 +40,45 @@ def main() -> None:
 
     subprocess.run(
         [
-            "cargo",
+            "just",
             "test",
             "-p",
             "codex-app-server-protocol",
             "--lib",
-            "schema_fixtures_tests::write_schema_fixtures_from_env",
-            "--",
-            "--exact",
-            "--ignored",
+            "--run-ignored",
+            "only",
+            "-E",
+            "test(=schema_fixtures_tests::write_schema_fixtures_from_env)",
         ],
         cwd=workspace_root,
         env=env,
         check=True,
     )
+
+    # Scratch exports and experimental-only bundles do not update checked-in SDK code.
+    if (
+        not args.experimental
+        and schema_root.resolve() == repository_schema_root.resolve()
+    ):
+        sdk_root = workspace_root.parent / "sdk" / "python"
+        subprocess.run(
+            [
+                "uv",
+                "run",
+                "--project",
+                str(sdk_root),
+                "--frozen",
+                "--only-group",
+                "test",
+                "python",
+                str(sdk_root / "scripts" / "update_sdk_artifacts.py"),
+                "generate-types",
+                "--schema-dir",
+                str(schema_root / "json"),
+            ],
+            cwd=workspace_root,
+            check=True,
+        )
 
 
 if __name__ == "__main__":

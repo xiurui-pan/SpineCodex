@@ -4,13 +4,13 @@ SpineCodex carries two intentionally separate version identities:
 
 - The product version is the workspace package version. It is used by npm
   packages, GitHub release tags, update checks, and product telemetry. The
-  current product version is `0.4.0`.
+  current product version is `0.5.0`.
 - The Codex compatibility version is the upstream client baseline used by
   protocol-facing requests. It is recorded in
   `[workspace.metadata.spinecodex]` in `codex-rs/Cargo.toml` and mirrored into
-  runtime distribution metadata. The current baseline is `0.153.4`, tag
-  `rust-v0.153.4`, commit
-  `3d2ee51ca2d5db578f328aa75e20aa22c0197c9a`.
+  runtime distribution metadata. The current baseline is `0.157.1`, tag
+  `rust-v0.157.1`, commit
+  `36650394c5b38c2990ccf2a3457165ca3e9d9726`.
 
 The public `--version` flags, including `codex --version` and
 `codex exec --version`, report the Codex compatibility version so a
@@ -28,9 +28,9 @@ The compatibility version is used for the server-visible Codex identity in:
 
 The App Server daemon is the sole initialize exception. It parses the response
 User-Agent as the running SpineCodex product version and compares that value
-with the managed binary's MCP `initialize` `serverInfo.version`, so both
-probes receive the product identity. This protocol is also available in legacy
-Spine binaries and does not confuse public CLI compatibility output with the product. MCP and other local product identities also continue to use the
+with the managed binary's app-server `initialize` User-Agent, so both
+probes receive the product identity. The probe uses the same daemon initialize identity on all platforms and does not
+confuse public CLI compatibility output with the product. Other local product identities also continue to use the
 product version.
 
 In code, `get_codex_product_user_agent()` is product-facing and

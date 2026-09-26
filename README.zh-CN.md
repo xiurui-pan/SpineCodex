@@ -16,7 +16,7 @@ SpineCodex 让你的 Codex **在一棵 SpineTree 上工作**：长周期、多�
 
 ### 快速开始
 
-在现有 Codex 环境中安装并直接运行。当前开发分支对齐上游 OpenAI Codex `0.153.4`；已发布版本见[发布记录](https://github.com/GhabiX/SpineCodex/releases)：
+在现有 Codex 环境中安装并直接运行。当前开发分支对齐上游 OpenAI Codex `0.157.1`；已发布版本见[发布记录](https://github.com/GhabiX/SpineCodex/releases)：
 
 ```bash
 npm install -g @spinejit/spine-codex@latest
@@ -274,7 +274,7 @@ SpineJIT 技术报告即将发布。
 
 ## 项目
 
-SpineCodex 是独立维护的 [OpenAI Codex CLI](https://github.com/openai/codex)（上游 0.153.4），由
+SpineCodex 是独立维护的 [OpenAI Codex CLI](https://github.com/openai/codex)（上游 0.157.1），由
 [Jiahong Xiang](https://ghabix.github.io) 和
 [Kunqiu Chen](https://camsyn.github.io) 维护。
 

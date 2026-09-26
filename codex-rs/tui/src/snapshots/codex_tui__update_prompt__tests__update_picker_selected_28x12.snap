@@ -1,0 +1,16 @@
+---
+source: tui/src/update_prompt.rs
+assertion_line: 363
+expression: rendered
+---
+
+  Update available · 0.5.0
+  → 9.9.9
+  Release notes:
+  https://github.com/Ghabi
+  X/SpineCodex/releases/la
+↑
+› 3. Skip until next version
+
+  enter continue · esc
+  skip

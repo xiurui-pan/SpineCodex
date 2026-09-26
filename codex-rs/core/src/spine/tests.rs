@@ -37,6 +37,7 @@ fn response_items(effective: &[(usize, &RolloutItem)]) -> Vec<codex_history::Res
             | RolloutItem::SecurityRiskScore(_)
             | RolloutItem::RealtimeItem(_)
             | RolloutItem::WorldState(_)
+            | RolloutItem::RetainedContext(_)
             | RolloutItem::EventMsg(_)
             | RolloutItem::SpineSamplingStarted(_)
             | RolloutItem::SpineTransition(_) => None,
@@ -197,7 +198,9 @@ fn multimodal_user_item_is_preserved_while_text_is_anchored() {
         role: "user".to_string(),
         content: vec![
             ContentItem::InputImage {
-                image_url: "data:image/png;base64,abc".to_string(),
+                image: codex_protocol::models::ImageReference::Inline {
+                    image_url: "data:image/png;base64,abc".to_string(),
+                },
                 detail: None,
             },
             ContentItem::InputText {
@@ -295,6 +298,8 @@ fn compact_replacement_history_is_materialized_exactly_once() {
             message: "summary".to_string(),
             replacement_history: Some(vec![replacement.clone().into()]),
             guardian_history: None,
+            retained_context: None,
+            resume_metadata: None,
             mcp_resource_origins: None,
             compaction_response_id: None,
             latest_token_usage_record: None,
@@ -331,7 +336,9 @@ fn closed_memory_user_slot_preserves_the_complete_native_message() {
         role: "user".to_string(),
         content: vec![
             ContentItem::InputImage {
-                image_url: "data:image/png;base64,abc".to_string(),
+                image: codex_protocol::models::ImageReference::Inline {
+                    image_url: "data:image/png;base64,abc".to_string(),
+                },
                 detail: None,
             },
             ContentItem::InputText {

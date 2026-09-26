@@ -7,34 +7,8 @@ use crate::CompactedItem;
 use crate::GuardianHistoryCheckpoint;
 use crate::ResponseItemEnvelope;
 use crate::RolloutItem;
-use crate::RolloutLine;
 use codex_protocol::models::ContentItem;
 use codex_protocol::models::ResponseItem;
-
-#[test]
-fn legacy_spine_records_keep_their_wire_shape() -> Result<()> {
-    // Artificial old-format records: no personal session data or credentials.
-    for (kind, payload) in [
-        (
-            "spine_sampling_started",
-            json!({"thread": "thread-1", "epoch": 3}),
-        ),
-        (
-            "spine_transition",
-            json!({"type": "sampling_shadow_v1", "record": {"digest": "abc"}}),
-        ),
-    ] {
-        let legacy = json!({
-            "timestamp": "2026-09-01T12:00:00.000Z",
-            "ordinal": 7,
-            "type": kind,
-            "payload": {"version": 1, "payload": payload},
-        });
-        let decoded: RolloutLine = serde_json::from_value(legacy.clone())?;
-        assert_eq!(serde_json::to_value(decoded)?, legacy);
-    }
-    Ok(())
-}
 
 #[test]
 fn compaction_beside_spine_records_preserves_harness_metadata_and_review_history() -> Result<()> {
@@ -53,7 +27,8 @@ fn compaction_beside_spine_records_preserves_harness_metadata_and_review_history
             item: item.clone(),
             metadata: Some(CodexHarnessMetadata {
                 client_authored: true,
-                fallback_token_limit_override: Some(2048),
+                history_truncation_token_limit: Some(2048),
+                ..Default::default()
             }),
         }]),
         guardian_history: Some(GuardianHistoryCheckpoint(vec![item])),
@@ -64,6 +39,8 @@ fn compaction_beside_spine_records_preserves_harness_metadata_and_review_history
         window_id: Some("window-3".to_string()),
         compaction_response_id: Some("response-3".to_string()),
         latest_token_usage_record: None,
+        retained_context: None,
+        resume_metadata: None,
     };
     let items = vec![
         RolloutItem::SpineSamplingStarted(crate::SpineSamplingStartedItem {

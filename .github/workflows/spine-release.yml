@@ -59,9 +59,12 @@ jobs:
           echo "version=$version tag=${tag:-rehearsal} publish=$publish"
 
       - name: Run SpineCodex release contract checks
+        env:
+          CODEX_REPO_ROOT: ${{ github.workspace }}
         run: |
           python3 .github/scripts/test_spine_release_workflow.py
           python3 .github/scripts/test_spine_product_docs.py
+          python3 .github/scripts/test_spine_voice_package.py
 
   build-unix:
     name: Build ${{ matrix.target }}
@@ -236,6 +239,10 @@ jobs:
           esac
           file "${binaries[@]}"
 
+      - uses: ./.github/actions/build-spine-voice
+        with:
+          target: ${{ matrix.target }}
+
       - name: Build and verify canonical package
         shell: bash
         run: |
@@ -249,7 +256,6 @@ jobs:
             --target "$target"
             --variant codex
             --package-dir "$package_dir"
-            --archive-output "$dest/codex-package-${target}.tar.gz"
             --cargo-profile release
             --entrypoint-bin "$release_dir/codex"
             --code-mode-host-bin "$release_dir/codex-code-mode-host"
@@ -258,6 +264,10 @@ jobs:
             args+=(--bwrap-bin "$release_dir/bwrap")
           fi
           python3 "${GITHUB_WORKSPACE}/scripts/build_codex_package.py" "${args[@]}"
+          python "${GITHUB_WORKSPACE}/.github/scripts/assemble-spine-voice-package.py" \
+            --package "$package_dir" \
+            --voice-release-dir "${RUNNER_TEMP}/spine-voice/${target}" \
+            --archive "$dest/codex-package-${target}.tar.gz"
           "$package_dir/bin/codex" --version
           "$package_dir/bin/codex" --help >/dev/null
           tar -tzf "$dest/codex-package-${target}.tar.gz"
@@ -335,6 +345,10 @@ jobs:
             --bin codex-command-runner \
             --bin codex-windows-sandbox-setup
 
+      - uses: ./.github/actions/build-spine-voice
+        with:
+          target: ${{ matrix.target }}
+
       - name: Build canonical package
         shell: bash
         run: |
@@ -348,12 +362,15 @@ jobs:
             --target "$target" \
             --variant codex \
             --package-dir "$package_dir" \
-            --archive-output "$dest/codex-package-${target}.tar.gz" \
             --cargo-profile release \
             --entrypoint-bin "$release_dir/codex.exe" \
             --code-mode-host-bin "$release_dir/codex-code-mode-host.exe" \
             --codex-command-runner-bin "$release_dir/codex-command-runner.exe" \
             --codex-windows-sandbox-setup-bin "$release_dir/codex-windows-sandbox-setup.exe"
+          python "${GITHUB_WORKSPACE}/.github/scripts/assemble-spine-voice-package.py" \
+            --package "$package_dir" \
+            --voice-release-dir "${RUNNER_TEMP}/spine-voice/${target}" \
+            --archive "$dest/codex-package-${target}.tar.gz"
           tar -tzf "$dest/codex-package-${target}.tar.gz"
 
       - name: Verify native package

@@ -1,0 +1,23 @@
+---
+source: tui/src/chatwidget/tests/popups_and_settings.rs
+assertion_line: 3217
+expression: popup
+---
+  Experimental features
+  Checked features are configured on. Some experimental features take effect
+  only in new tasks or after restarting the Codex server.
+
+
+› [x] Spine spawn  Concurrent branch agents: 3  Run differentiated Spine
+                                                branches concurrently and join
+                                                their results. Disabled by
+                                                default; changes apply to new
+                                                sessions.
+  [ ] Network proxy                             Apply network proxy restrictions
+                                                to sandboxed sessions that
+                                                already have network access.
+  [ ] Prevent sleep while running               Keep your computer awake while
+                                                Codex is running a thread.
+
+
+  space toggle  ←/→ branch agents  enter save for next session

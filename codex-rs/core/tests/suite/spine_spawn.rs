@@ -2,7 +2,6 @@ use anyhow::Context;
 use anyhow::Result;
 use codex_features::Feature;
 use codex_history::RolloutItem;
-use codex_history::RolloutLine;
 use codex_protocol::AgentPath;
 use codex_protocol::models::ResponseItem;
 use codex_protocol::openai_models::ReasoningEffort;
@@ -157,7 +156,7 @@ fn persisted_function_call_output(test: &TestCodex, call_id: &str) -> Result<Str
     rollout
         .lines()
         .filter(|line| !line.trim().is_empty())
-        .map(serde_json::from_str::<RolloutLine>)
+        .map(|line| serde_json::from_str(line).and_then(codex_rollout::decode_rollout_line))
         .collect::<Result<Vec<_>, _>>()?
         .into_iter()
         .find_map(|line| match line.item {

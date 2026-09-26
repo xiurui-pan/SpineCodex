@@ -1,0 +1,19 @@
+---
+source: tui/src/chatwidget/tests/popups_and_settings.rs
+assertion_line: 3181
+expression: "render_bottom_popup(&chat, 80)"
+---
+  Experimental features
+  Checked features are configured on. Some experimental features take effect
+  only in new tasks or after restarting the Codex server.
+  Loading server experiments…
+
+
+› [x] Spine spawn  Concurrent branch agents: 3  Run differentiated Spine
+                                                branches concurrently and join
+                                                their results. Disabled by
+                                                default; changes apply to new
+                                                sessions.
+
+
+  space toggle  ←/→ branch agents  enter save for next session

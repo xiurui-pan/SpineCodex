@@ -1,11 +1,12 @@
 ---
 source: tui/src/app/tests.rs
-assertion_line: 642
+assertion_line: 1005
 expression: "format!(\"  Subagents{picker}\")"
 ---
   Subagents
-  Select an agent to watch. ⌥ + ← previous, ⌥ + → next.
+  Select an agent to watch. ⌥+← previous, ⌥+→ next.
+
 
 › 1. • Audit cache invalidation
 
-  Press enter to confirm or esc to go back
+  enter select · esc back

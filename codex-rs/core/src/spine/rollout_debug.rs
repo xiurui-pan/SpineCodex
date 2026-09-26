@@ -1,7 +1,6 @@
 use std::collections::BTreeMap;
 
 use codex_history::RolloutItem;
-use codex_history::RolloutLine;
 use codex_protocol::models::AgentMessageInputContent;
 use codex_protocol::models::ContentItem;
 use codex_protocol::models::FunctionCallOutputBody;
@@ -45,6 +44,7 @@ pub(crate) enum DebugRolloutRecord {
     TokenUsageRecord {
         usage: DebugTokenUsage,
     },
+    RetainedContext,
     SecurityRiskScore,
     RealtimeItem,
     SessionMeta {
@@ -200,6 +200,7 @@ pub(crate) enum DebugResponseItem {
         id: Option<u64>,
         turn_id: Option<u64>,
     },
+    ConfigurationUpdate,
     CompactionTrigger,
     ContextCompaction {
         id: Option<u64>,
@@ -874,7 +875,7 @@ impl RolloutDebugRedactor {
             }
         }
 
-        let Ok(line) = serde_json::from_value::<RolloutLine>(raw) else {
+        let Ok(line) = codex_rollout::decode_rollout_line(raw) else {
             let scope = match top_type.as_deref() {
                 Some("response_item") => DebugPlaceholderScope::ResponseItem,
                 Some("event_msg") => DebugPlaceholderScope::Event,
@@ -970,6 +971,7 @@ impl RolloutDebugRedactor {
             RolloutItem::TokenUsageRecord(record) => DebugRolloutRecord::TokenUsageRecord {
                 usage: debug_token_usage(record.usage),
             },
+            RolloutItem::RetainedContext(_) => DebugRolloutRecord::RetainedContext,
             RolloutItem::SecurityRiskScore(_) => DebugRolloutRecord::SecurityRiskScore,
             RolloutItem::RealtimeItem(_) => DebugRolloutRecord::RealtimeItem,
             RolloutItem::SpineSamplingStarted(_) | RolloutItem::SpineTransition(_) => {
@@ -1195,6 +1197,7 @@ impl RolloutDebugRedactor {
                 id: self.optional_local_id(IdNamespace::Item, id.as_deref()),
                 turn_id: self.turn_id(internal_chat_message_metadata_passthrough.as_ref()),
             },
+            ResponseItem::ConfigurationUpdate { .. } => DebugResponseItem::ConfigurationUpdate,
             ResponseItem::CompactionTrigger {} => DebugResponseItem::CompactionTrigger,
             ResponseItem::ContextCompaction {
                 id,
@@ -1533,6 +1536,7 @@ fn is_known_rollout_item_type(kind: &str) -> bool {
             | "compacted"
             | "turn_context"
             | "world_state"
+            | "retained_context"
             | "event_msg"
     )
 }
@@ -1555,6 +1559,7 @@ fn is_known_response_item_type(kind: &str) -> bool {
             | "image_generation_call"
             | "compaction"
             | "compaction_summary"
+            | "configuration_update"
             | "compaction_trigger"
             | "context_compaction"
             | "other"

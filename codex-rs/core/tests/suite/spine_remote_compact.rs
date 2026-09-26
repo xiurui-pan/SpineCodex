@@ -74,7 +74,7 @@ fn window_generation(request: &responses::ResponsesRequest) -> (String, u64) {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn remote_compact_installs_spine_root_compact_for_followups() -> Result<()> {
+async fn remote_compact_installs_spine_root_compact_with_legacy_feature_disabled() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
     let harness = TestCodexHarness::with_builder(
@@ -94,20 +94,20 @@ async fn remote_compact_installs_spine_root_compact_for_followups() -> Result<()
                 responses::ev_completed("resp-1"),
             ]),
             responses::sse(vec![
+                serde_json::json!({
+                    "type": "response.output_item.done",
+                    "item": {
+                        "type": "compaction",
+                        "encrypted_content": "ENCRYPTED_SPINE_COMPACTION_SUMMARY"
+                    }
+                }),
+                responses::ev_completed("resp-compact"),
+            ]),
+            responses::sse(vec![
                 responses::ev_assistant_message("m2", "AFTER_COMPACT_REPLY"),
                 responses::ev_completed("resp-2"),
             ]),
         ],
-    )
-    .await;
-    let compact_mock = responses::mount_compact_json_once(
-        harness.server(),
-        serde_json::json!({
-            "output": [{
-                "type": "compaction",
-                "encrypted_content": "ENCRYPTED_SPINE_COMPACTION_SUMMARY"
-            }]
-        }),
     )
     .await;
 
@@ -118,10 +118,6 @@ async fn remote_compact_installs_spine_root_compact_for_followups() -> Result<()
     wait_for_turn_complete(&codex).await;
     submit_text(&codex, "after Spine compact").await?;
 
-    assert_eq!(
-        compact_mock.single_request().path(),
-        "/v1/responses/compact"
-    );
     let requests = responses_mock.requests();
     let followup = requests.last().expect("follow-up response request");
     assert_followup_preserves_spine_projection(followup);
@@ -192,8 +188,8 @@ async fn remote_compact_v2_installs_spine_root_compact_for_followups() -> Result
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn remote_compact_v1_retry_installs_base_window_and_spine_projection_atomically() -> Result<()>
-{
+async fn remote_compact_http_retry_installs_base_window_and_spine_projection_atomically()
+-> Result<()> {
     skip_if_no_network!(Ok(()));
 
     let harness = TestCodexHarness::with_builder(
@@ -207,51 +203,48 @@ async fn remote_compact_v1_retry_installs_base_window_and_spine_projection_atomi
     )
     .await?;
     let codex = harness.test().codex.clone();
-    let responses_mock = responses::mount_sse_sequence(
+    let responses_mock = responses::mount_response_sequence(
         harness.server(),
         vec![
-            responses::sse(vec![
-                responses::ev_assistant_message("v1-atomic-before", "BEFORE_V1_ATOMIC"),
-                responses::ev_completed("v1-atomic-before-response"),
-            ]),
-            responses::sse(vec![
-                responses::ev_assistant_message("v1-atomic-after", "AFTER_V1_ATOMIC"),
-                responses::ev_completed("v1-atomic-after-response"),
-            ]),
-        ],
-    )
-    .await;
-    let compact_mock = responses::mount_compact_response_sequence(
-        harness.server(),
-        vec![
+            responses::sse_response(responses::sse(vec![
+                responses::ev_assistant_message("http-atomic-before", "BEFORE_HTTP_ATOMIC"),
+                responses::ev_completed("http-atomic-before-response"),
+            ])),
             ResponseTemplate::new(503).set_body_string("retry compact without installing"),
-            ResponseTemplate::new(200)
-                .insert_header("content-type", "application/json")
-                .set_body_json(serde_json::json!({
-                    "output": [{
+            responses::sse_response(responses::sse(vec![
+                serde_json::json!({
+                    "type": "response.output_item.done",
+                    "item": {
                         "type": "compaction",
-                        "encrypted_content": "V1_ATOMIC_SUCCESS_SUMMARY"
-                    }]
-                })),
+                        "encrypted_content": "HTTP_ATOMIC_SUCCESS_SUMMARY"
+                    }
+                }),
+                responses::ev_completed("http-atomic-compact-response"),
+            ])),
+            responses::sse_response(responses::sse(vec![
+                responses::ev_assistant_message("http-atomic-after", "AFTER_HTTP_ATOMIC"),
+                responses::ev_completed("http-atomic-after-response"),
+            ])),
         ],
     )
     .await;
 
-    submit_text(&codex, "before v1 atomic compact").await?;
+    submit_text(&codex, "before HTTP atomic compact").await?;
     codex.submit(Op::Compact).await?;
     let spine_update = wait_for_spine_tree_update(&codex).await;
     assert_eq!(spine_update.active_node_id, "2");
     wait_for_turn_complete(&codex).await;
-    submit_text(&codex, "after v1 atomic compact").await?;
+    submit_text(&codex, "after HTTP atomic compact").await?;
 
     let response_requests = responses_mock.requests();
     let initial = response_requests.first().expect("initial request");
     let followup = response_requests.last().expect("follow-up request");
-    let compact_requests = compact_mock.requests();
+    assert_eq!(response_requests.len(), 4);
+    let compact_requests = &response_requests[1..3];
     assert_eq!(compact_requests.len(), 2);
     let (thread_id, initial_generation) = window_generation(initial);
     assert_eq!(initial_generation, 0);
-    for compact_request in &compact_requests {
+    for compact_request in compact_requests {
         assert_eq!(
             window_generation(compact_request),
             (thread_id.clone(), initial_generation),
@@ -261,7 +254,7 @@ async fn remote_compact_v1_retry_installs_base_window_and_spine_projection_atomi
     assert_eq!(window_generation(followup), (thread_id, 1));
     assert_followup_preserves_spine_projection(followup);
     let followup_body = followup.body_json().to_string();
-    assert!(followup_body.contains("V1_ATOMIC_SUCCESS_SUMMARY"));
+    assert!(followup_body.contains("HTTP_ATOMIC_SUCCESS_SUMMARY"));
     assert!(!followup_body.contains("retry compact without installing"));
     Ok(())
 }

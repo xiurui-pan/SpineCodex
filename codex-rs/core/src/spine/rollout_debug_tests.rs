@@ -1,4 +1,3 @@
-use codex_history::RolloutLine;
 use pretty_assertions::assert_eq;
 use serde_json::Value;
 use serde_json::json;
@@ -8,6 +7,22 @@ use super::RolloutDebugRedactor;
 use super::RolloutDebugRedactorError;
 
 const SECRET: &str = "private-seed-7c84f24b";
+
+#[test]
+fn configuration_updates_preserve_record_kind_without_exposing_settings() {
+    let mut redactor = RolloutDebugRedactor::default();
+    let output = redact(
+        &mut redactor,
+        line(
+            "response_item",
+            json!({"type": "configuration_update", "reasoning": {"effort": "high"}}),
+        ),
+    );
+    assert_eq!(
+        output,
+        json!({"record_type": "response_item", "item": {"type": "configuration_update"}})
+    );
+}
 
 fn line(item_type: &str, payload: Value) -> Value {
     json!({
@@ -466,7 +481,7 @@ fn compact_replacement_is_recursively_redacted_and_not_replayable() {
         output["replacement_history"][0]["content"],
         json!(["output_text"])
     );
-    assert!(serde_json::from_value::<RolloutLine>(output).is_err());
+    assert!(codex_rollout::decode_rollout_line(output).is_err());
 }
 
 #[test]

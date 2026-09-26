@@ -31,7 +31,6 @@ use crate::motion::activity_indicator;
 use crate::motion::green_growth_marker;
 use crate::motion::green_shimmer_text;
 use crate::motion::green_then_default_shimmer_text;
-use crate::motion::shimmer_text;
 use crate::render::renderable::Renderable;
 use crate::text_formatting::capitalize_first;
 use crate::tui::FrameRequester;
@@ -41,6 +40,10 @@ use crate::wrapping::word_wrap_lines;
 
 mod timer;
 pub(crate) use timer::StatusTimer;
+
+#[path = "summary_shimmer.rs"]
+mod summary_shimmer;
+use summary_shimmer::summary_shimmer;
 
 pub(crate) const STATUS_DETAILS_DEFAULT_MAX_LINES: usize = 3;
 const DETAILS_PREFIX: &str = "  └ ";
@@ -57,6 +60,7 @@ pub(crate) struct StatusIndicatorWidget {
     header: String,
     header_is_reasoning: bool,
     organic_working_word: Option<&'static str>,
+    header_started_at: Instant,
     details: Option<String>,
     details_max_lines: usize,
     /// Optional suffix rendered after the elapsed/interrupt segment.
@@ -69,6 +73,7 @@ pub(crate) struct StatusIndicatorWidget {
     app_event_tx: AppEventSender,
     frame_requester: FrameRequester,
     animations_enabled: bool,
+    effects: codex_config::types::TuiEffects,
 }
 
 // Format elapsed seconds into a compact human-friendly form used by the status line.
@@ -93,11 +98,13 @@ impl StatusIndicatorWidget {
         app_event_tx: AppEventSender,
         frame_requester: FrameRequester,
         animations_enabled: bool,
+        effects: codex_config::types::TuiEffects,
     ) -> Self {
         Self {
             header: String::from("Working"),
             header_is_reasoning: false,
             organic_working_word: None,
+            header_started_at: Instant::now(),
             details: None,
             details_max_lines: STATUS_DETAILS_DEFAULT_MAX_LINES,
             inline_message: None,
@@ -107,6 +114,7 @@ impl StatusIndicatorWidget {
             app_event_tx,
             frame_requester,
             animations_enabled,
+            effects,
         }
     }
 
@@ -116,6 +124,9 @@ impl StatusIndicatorWidget {
 
     /// Update the animated header label (left of the brackets).
     pub(crate) fn update_header(&mut self, header: String, header_is_reasoning: bool) {
+        if self.header != header {
+            self.header_started_at = Instant::now();
+        }
         self.header = header;
         self.header_is_reasoning = header_is_reasoning;
     }
@@ -233,9 +244,15 @@ impl StatusIndicator<'_> {
     fn lines(&self, width: u16) -> Vec<Line<'static>> {
         let row = self.row;
         let now = Instant::now();
-        let elapsed_duration = self.timer.elapsed_at(now);
+        let elapsed_duration = self.timer.display_started_at.map_or_else(
+            || self.timer.elapsed_at(now),
+            |started_at| now.saturating_duration_since(started_at),
+        );
         let pretty_elapsed = fmt_elapsed_compact(elapsed_duration.as_secs());
-        let motion_mode = MotionMode::from_animations_enabled(row.animations_enabled);
+        let progress =
+            MotionMode::from_animations_enabled(row.animations_enabled && row.effects.progress);
+        let shimmer =
+            MotionMode::from_animations_enabled(row.animations_enabled && row.effects.shimmer);
 
         let mut spans = Vec::with_capacity(7);
         let mut organic_activity_word = None;
@@ -243,19 +260,23 @@ impl StatusIndicator<'_> {
             && let Some(activity_word) = row.organic_working_word
         {
             spans.push(" ".into());
-            spans.push(green_growth_marker(elapsed_duration, motion_mode));
+            spans.push(green_growth_marker(elapsed_duration, progress));
             spans.push(" ".into());
             organic_activity_word = Some(activity_word);
         } else {
             if let Some(indicator) = activity_indicator(
                 Some(self.timer.last_resume_at),
-                motion_mode,
+                progress,
                 ReducedMotionIndicator::Hidden,
             ) {
                 spans.push(indicator);
                 spans.push(" ".into());
             }
-            spans.extend(shimmer_text(&row.header, motion_mode));
+            spans.extend(summary_shimmer(
+                &row.header,
+                now.saturating_duration_since(row.header_started_at),
+                shimmer,
+            ));
         }
 
         let mut suffix_spans = Vec::with_capacity(5);
@@ -265,11 +286,9 @@ impl StatusIndicator<'_> {
         if row.show_interrupt_hint
             && let Some(interrupt_binding) = row.interrupt_binding
         {
-            suffix_spans.extend(vec![
-                format!("({pretty_elapsed} • ").dim(),
-                interrupt_binding.into(),
-                " to interrupt)".dim(),
-            ]);
+            suffix_spans.push(format!("({pretty_elapsed} • ").dim());
+            suffix_spans.extend(interrupt_binding.spans());
+            suffix_spans.push(" to interrupt)".dim());
         } else {
             suffix_spans.push(format!("({pretty_elapsed})").dim());
         }
@@ -299,13 +318,13 @@ impl StatusIndicator<'_> {
                     spans.extend(green_then_default_shimmer_text(
                         activity_word,
                         &default_text,
-                        motion_mode,
+                        shimmer,
                     ));
                 } else {
-                    spans.extend(green_shimmer_text(activity_word, motion_mode));
+                    spans.extend(green_shimmer_text(activity_word, shimmer));
                 }
             } else {
-                spans.extend(green_shimmer_text(activity_word, motion_mode));
+                spans.extend(green_shimmer_text(activity_word, shimmer));
             }
         }
         spans.extend(suffix_spans);
@@ -344,10 +363,17 @@ impl Renderable for StatusIndicator<'_> {
         if area.is_empty() {
             return;
         }
-        if self.row.animations_enabled {
+        if self.row.animations_enabled || self.timer.display_started_at.is_some() {
+            let interval_ms = if self.row.animations_enabled
+                && (self.row.effects.progress || self.row.effects.shimmer)
+            {
+                32
+            } else {
+                1_000
+            };
             self.row
                 .frame_requester
-                .schedule_frame_in(Duration::from_millis(32));
+                .schedule_frame_in(Duration::from_millis(interval_ms));
         }
         Paragraph::new(Text::from(self.lines(area.width))).render(area, buf);
     }
@@ -382,6 +408,26 @@ mod tests {
     }
 
     #[test]
+    fn changed_summary_restarts_shimmer_but_repeated_summary_keeps_phase() {
+        let (tx, _rx) = unbounded_channel();
+        let mut row = StatusIndicatorWidget::new(
+            AppEventSender::new(tx),
+            FrameRequester::test_dummy(),
+            /*animations_enabled*/ true,
+            Default::default(),
+        );
+        let previous = Instant::now() - Duration::from_secs(/*secs*/ 1);
+        row.header_started_at = previous;
+        row.update_header("Working".to_owned(), /*header_is_reasoning*/ false);
+        assert_eq!(row.header_started_at, previous);
+        row.update_header(
+            "Mapping the app structure".to_owned(),
+            /*header_is_reasoning*/ true,
+        );
+        assert!(row.header_started_at > previous);
+    }
+
+    #[test]
     fn fmt_elapsed_compact_formats_seconds_minutes_hours() {
         assert_eq!(fmt_elapsed_compact(/*elapsed_secs*/ 0), "0s");
         assert_eq!(fmt_elapsed_compact(/*elapsed_secs*/ 1), "1s");
@@ -404,6 +450,7 @@ mod tests {
             tx,
             crate::tui::FrameRequester::test_dummy(),
             /*animations_enabled*/ true,
+            Default::default(),
         );
 
         // Render into a fixed-size test terminal and snapshot the backend.
@@ -422,6 +469,7 @@ mod tests {
             tx,
             crate::tui::FrameRequester::test_dummy(),
             /*animations_enabled*/ false,
+            Default::default(),
         );
         widget.set_organic_working_word(Some("Blooming"));
 
@@ -461,6 +509,7 @@ mod tests {
             tx,
             crate::tui::FrameRequester::test_dummy(),
             /*animations_enabled*/ false,
+            Default::default(),
         );
         widget.set_organic_working_word(Some("Blooming"));
         widget.update_header(
@@ -482,6 +531,7 @@ mod tests {
             tx,
             crate::tui::FrameRequester::test_dummy(),
             /*animations_enabled*/ false,
+            Default::default(),
         );
         widget.set_organic_working_word(Some("Blooming"));
 
@@ -521,6 +571,7 @@ mod tests {
             tx,
             crate::tui::FrameRequester::test_dummy(),
             /*animations_enabled*/ false,
+            Default::default(),
         );
         widget.set_organic_working_word(Some("Blooming"));
         widget.update_header(
@@ -543,6 +594,7 @@ mod tests {
             tx,
             crate::tui::FrameRequester::test_dummy(),
             /*animations_enabled*/ true,
+            Default::default(),
         );
 
         // Render into a fixed-size test terminal and snapshot the backend.
@@ -561,6 +613,7 @@ mod tests {
             tx,
             crate::tui::FrameRequester::test_dummy(),
             /*animations_enabled*/ false,
+            Default::default(),
         );
         w.update_details(
             Some("A man a plan a canal panama".to_string()),
@@ -590,6 +643,7 @@ mod tests {
             tx,
             crate::tui::FrameRequester::test_dummy(),
             /*animations_enabled*/ false,
+            Default::default(),
         );
         let mut timer = StatusTimer::default();
         timer.pause_at(timer.last_resume_at);
@@ -614,6 +668,7 @@ mod tests {
             tx,
             crate::tui::FrameRequester::test_dummy(),
             /*animations_enabled*/ false,
+            Default::default(),
         );
         w.set_interrupt_binding(Some(key_hint::plain(KeyCode::F(12)).into()));
         let mut timer = StatusTimer::default();
@@ -633,6 +688,7 @@ mod tests {
             AppEventSender::new(tx),
             crate::tui::FrameRequester::test_dummy(),
             /*animations_enabled*/ false,
+            Default::default(),
         );
         let mut timer = StatusTimer::default();
         timer.pause_at(timer.last_resume_at);
@@ -680,6 +736,7 @@ mod tests {
             tx,
             crate::tui::FrameRequester::test_dummy(),
             /*animations_enabled*/ true,
+            Default::default(),
         );
         w.update_details(
             Some("abcd abcd abcd abcd".to_string()),
@@ -704,6 +761,7 @@ mod tests {
             tx,
             crate::tui::FrameRequester::test_dummy(),
             /*animations_enabled*/ true,
+            Default::default(),
         );
         w.update_details(
             Some("cargo test -p codex-core and then cargo test -p codex-tui".to_string()),
@@ -727,3 +785,7 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "status_indicator_widget/effects_tests.rs"]
+mod effects_tests;

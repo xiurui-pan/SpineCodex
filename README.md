@@ -20,7 +20,8 @@ without forcing the entire process into one ever-growing transcript.
 ### Get started
 
 Install it in your existing Codex environment and run it directly. The current
-development branch targets upstream OpenAI Codex `0.153.4`. Published builds
+development branch prepares SpineCodex `0.5.0`, based on upstream OpenAI Codex
+`0.157.1`. Published builds
 are listed in the [release history](https://github.com/GhabiX/SpineCodex/releases):
 
 ```bash
@@ -314,7 +315,7 @@ If you use SpineCodex in your research, please cite this repository:
 ## Project
 
 SpineCodex is an independently maintained [OpenAI Codex CLI](https://github.com/openai/codex)
-(upstream 0.153.4), maintained by [Jiahong Xiang](https://ghabix.github.io)
+(upstream 0.157.1), maintained by [Jiahong Xiang](https://ghabix.github.io)
 and [Kunqiu Chen](https://camsyn.github.io).
 
 SpineCodex is licensed under the [Apache-2.0 License](LICENSE). OpenAI Codex

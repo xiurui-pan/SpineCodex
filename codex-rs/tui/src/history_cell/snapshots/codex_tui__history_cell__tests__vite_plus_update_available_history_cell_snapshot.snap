@@ -1,9 +1,10 @@
 ---
 source: tui/src/history_cell/tests.rs
+assertion_line: 1388
 expression: rendered
 ---
 ╭───────────────────────────────────────────────────────────╮
-│ ✨ Update available! 0.4.0 -> 9.9.9                       │
+│ ✨ Update available! 0.5.0 -> 9.9.9                       │
 │ Run vp install -g @spinejit/spine-codex@latest to update. │
 │                                                           │
 │ See full release notes:                                   │

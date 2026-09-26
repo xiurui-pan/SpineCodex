@@ -7,8 +7,11 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::Mutex;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
 
 use crate::app_command::AppCommand;
+use crate::app_command::UserVerificationResponse;
 use codex_app_server_protocol::CommandExecutionApprovalDecision;
 use codex_app_server_protocol::FileChangeApprovalDecision;
 use codex_app_server_protocol::McpServerElicitationAction;
@@ -27,6 +30,7 @@ use crate::session_log;
 pub(crate) struct AppEventSender {
     pub app_event_tx: UnboundedSender<AppEvent>,
     spine_projection_epochs: Arc<Mutex<HashMap<ThreadId, u64>>>,
+    pub(crate) voice_only: Arc<AtomicBool>,
 }
 
 impl AppEventSender {
@@ -34,6 +38,7 @@ impl AppEventSender {
         Self {
             app_event_tx,
             spine_projection_epochs: Arc::new(Mutex::new(HashMap::new())),
+            voice_only: Arc::default(),
         }
     }
 
@@ -41,6 +46,26 @@ impl AppEventSender {
     /// error and log it.
     pub(crate) fn send(&self, event: AppEvent) {
         let event = self.stamp_spine_projection(event);
+        // A parked voice owner keeps processing its session, but its UI and queued
+        // typed work must not act on the visible session. Thread-scoped metadata still applies.
+        if self.voice_only.load(Ordering::Relaxed)
+            && !matches!(
+                &event,
+                AppEvent::CodexOp(
+                    AppCommand::RealtimeConversationStart { .. }
+                        | AppCommand::RealtimeConversationStop { .. }
+                        | AppCommand::RealtimeConversationSpeech { .. }
+                ) | AppEvent::RealtimeWebrtcOfferCreated { .. }
+                    | AppEvent::RealtimeWebrtcConnected { .. }
+                    | AppEvent::StopRealtimeConversation { .. }
+                    | AppEvent::RealtimeConversationStateChanged
+                    | AppEvent::BackgroundVoiceError { .. }
+                    | AppEvent::SyncThreadGitBranch { .. }
+                    | AppEvent::RefreshRateLimits { .. }
+            )
+        {
+            return;
+        }
         // Record inbound events for high-fidelity session replay.
         // Avoid double-logging Ops; those are logged at the point of submission.
         if !matches!(event, AppEvent::CodexOp(_)) {
@@ -190,6 +215,19 @@ impl AppEventSender {
         self.send(AppEvent::SubmitThreadOp {
             thread_id,
             op: AppCommand::resolve_elicitation(server_name, request_id, decision, content, meta),
+        });
+    }
+
+    pub(crate) fn resolve_user_verification(
+        &self,
+        thread_id: ThreadId,
+        server_name: String,
+        request_id: AppServerRequestId,
+        response: UserVerificationResponse,
+    ) {
+        self.send(AppEvent::SubmitThreadOp {
+            thread_id,
+            op: AppCommand::resolve_user_verification(server_name, request_id, response),
         });
     }
 }

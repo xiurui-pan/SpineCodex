@@ -6,9 +6,9 @@ use codex_protocol::error::Result as CodexResult;
 use codex_protocol::turn_input::TurnStartOptions;
 use codex_protocol::user_input::UserInput;
 
-use super::AgentControl;
+use super::LocalAgentControl;
 
-impl AgentControl {
+impl LocalAgentControl {
     pub(crate) async fn wait_for_spine_spawn_turn_idle(
         &self,
         thread_id: ThreadId,

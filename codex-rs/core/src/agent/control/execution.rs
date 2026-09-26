@@ -1,4 +1,8 @@
-use super::AgentControl;
+//! Tracks local running capacity and releases reservations through the shared guard.
+//! The local permit owns the running count; root and MAv1 turns remain unrestricted.
+
+use super::LocalAgentControl;
+use crate::agent::types::AgentExecutionGuard;
 use crate::codex_thread::CodexThread;
 use codex_protocol::AgentPath;
 use codex_protocol::error::CodexErr;
@@ -24,16 +28,16 @@ struct AgentExecutionState {
     reserved_agent_paths: HashSet<String>,
 }
 
-pub(crate) struct AgentExecutionGuard {
-    limiter: Arc<AgentExecutionLimiter>,
-}
-
 pub(crate) struct AgentExecutionReservation {
     limiter: Arc<AgentExecutionLimiter>,
     active: bool,
 }
 
-impl Drop for AgentExecutionGuard {
+struct LocalExecutionPermit {
+    limiter: Arc<AgentExecutionLimiter>,
+}
+
+impl Drop for LocalExecutionPermit {
     fn drop(&mut self) {
         let mut state = self
             .limiter
@@ -73,7 +77,7 @@ impl Drop for AgentExecutionReservation {
     }
 }
 
-impl AgentControl {
+impl LocalAgentControl {
     pub(crate) async fn ensure_execution_capacity_for_turn_start(
         &self,
         thread: &CodexThread,
@@ -96,8 +100,8 @@ impl AgentControl {
         if !is_execution_limited(multi_agent_version, session_source) {
             return Ok(());
         }
-        let max_threads = self.agent_execution_limiter.max_threads();
-        if self.agent_execution_limiter.has_capacity() {
+        let max_threads = self.runtime.agent_execution_limiter.max_threads();
+        if self.runtime.agent_execution_limiter.has_capacity() {
             Ok(())
         } else {
             Err(CodexErr::new(CodexErrorDetails::AgentLimitReached {
@@ -112,24 +116,26 @@ impl AgentControl {
         session_source: &SessionSource,
     ) -> Option<AgentExecutionGuard> {
         if let Some(agent_path) = session_source.get_agent_path() {
-            let limiter = Arc::clone(&self.spine_spawn_limiter);
+            let limiter = Arc::clone(&self.runtime.spine_spawn_limiter);
             if limiter.claim(&agent_path) {
-                return Some(AgentExecutionGuard { limiter });
+                return Some(AgentExecutionGuard::new(LocalExecutionPermit { limiter }));
             }
         }
         is_execution_limited(multi_agent_version, session_source)
-            .then(|| Arc::clone(&self.agent_execution_limiter).guard())
+            .then(|| Arc::clone(&self.runtime.agent_execution_limiter).guard())
     }
 
     pub(crate) fn reserve_spine_spawn_slots(
         &self,
         count: usize,
     ) -> CodexResult<Vec<AgentExecutionReservation>> {
-        Arc::clone(&self.spine_spawn_limiter).reserve(count)
+        Arc::clone(&self.runtime.spine_spawn_limiter).reserve(count)
     }
 
     pub(crate) fn release_execution_reservation(&self, agent_path: &AgentPath) {
-        self.spine_spawn_limiter.release_reserved(agent_path);
+        self.runtime
+            .spine_spawn_limiter
+            .release_reserved(agent_path);
     }
 }
 
@@ -202,7 +208,7 @@ impl AgentExecutionLimiter {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .active += 1;
-        AgentExecutionGuard { limiter: self }
+        AgentExecutionGuard::new(LocalExecutionPermit { limiter: self })
     }
 }
 

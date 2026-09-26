@@ -227,6 +227,9 @@ async fn resumed_settled_spawn_stays_hidden_across_picker_refreshes() -> Result<
             path: None,
             cwd: app.config.cwd.clone(),
             cli_version: "0.0.0".to_string(),
+            originator: None,
+            environments: None,
+            daybreak_enabled: None,
             source: codex_app_server_protocol::SessionSource::SubAgent(
                 SubAgentSource::ThreadSpawn {
                     parent_thread_id,
@@ -323,12 +326,13 @@ async fn resumed_settled_spawn_stays_hidden_across_picker_refreshes() -> Result<
                 .replace(&native_thread_id.to_string(), "[native]"),
             @r###"
               Subagents
-              Select an agent to watch. ⌥ + ← previous, ⌥ + → next.
+              Select an agent to watch. ⌥+← previous, ⌥+→ next.
+
 
             › 1. • Main [default] (current)  [root]
               2. • /root/native              [native]
 
-              Press enter to confirm or esc to go back
+              enter select · esc back
             "###
             );
         }

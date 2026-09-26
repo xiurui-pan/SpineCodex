@@ -8,7 +8,6 @@ use std::time::Duration;
 use anyhow::Context;
 use anyhow::Result;
 use codex_history::RolloutItem;
-use codex_history::RolloutLine;
 use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::Op;
 use codex_protocol::user_input::UserInput;
@@ -364,7 +363,7 @@ fn load_sampling_records(test: &TestCodex) -> Result<Vec<SamplingArchiveRecord>>
     let rollout = fs::read_to_string(test.codex.rollout_path().context("rollout path")?)?;
     rollout
         .lines()
-        .map(serde_json::from_str::<RolloutLine>)
+        .map(|line| serde_json::from_str(line).and_then(codex_rollout::decode_rollout_line))
         .collect::<std::result::Result<Vec<_>, _>>()?
         .into_iter()
         .filter_map(|line| match line.item {

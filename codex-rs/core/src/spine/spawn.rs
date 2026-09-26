@@ -1,4 +1,6 @@
 use crate::agent::AgentStatus;
+use crate::agent::api::StatusSubscription;
+use crate::agent::child_config::build_agent_spawn_config;
 use crate::agent::control::SpawnAgentBatchRequest;
 use crate::agent::control::SpawnAgentForkMode;
 use crate::agent::control::SpawnAgentOptions;
@@ -9,7 +11,6 @@ use crate::session::MailboxSubmissionCancellation;
 use crate::session::multi_agents::resolve_usage_hints;
 use crate::session::session::Session;
 use crate::session::step_context::StepContext;
-use crate::tools::handlers::multi_agents_common::build_agent_spawn_config;
 use crate::tools::handlers::multi_agents_common::thread_spawn_source;
 use codex_protocol::AgentPath;
 use codex_protocol::ThreadId;
@@ -22,6 +23,7 @@ use codex_protocol::protocol::SpineSpawnProgressEvent;
 use codex_protocol::protocol::SpineSpawnTaskProgress;
 use codex_protocol::turn_input::TurnStartOptions;
 use codex_protocol::user_input::UserInput;
+use futures::StreamExt;
 use futures::future::join_all;
 use spine_core::host::SPINE_SPAWN_RESULT_SCHEMA;
 use spine_core::host::SpawnOutcome;
@@ -292,12 +294,10 @@ async fn execute_transaction(
         return Err("spine.spawn was cancelled before child creation".to_string());
     }
 
-    let mut config =
-        build_agent_spawn_config(&session.get_base_instructions().await, turn.as_ref())
-            .map_err(|error| error.to_string())?;
-    config.model = Some(step_context.settings.model_info.slug.clone());
-    config.model_reasoning_effort = step_context.settings.reasoning_effort().cloned();
-    config.model_reasoning_summary = Some(step_context.settings.reasoning_summary);
+    let mut config = build_agent_spawn_config(
+        &session.get_base_instructions().await,
+        step_context.as_ref(),
+    )?;
     config.service_tier = step_context.settings.service_tier.clone();
     config
         .permissions
@@ -487,18 +487,12 @@ fn spawn_options(
     config: &crate::config::Config,
 ) -> SpawnAgentOptions {
     let turn = &step.turn;
-    let catalog = step
-        .settings
-        .model_info
-        .model_messages
-        .as_ref()
-        .and_then(|messages| messages.multi_agent.as_ref())
-        .and_then(|messages| messages.role.as_ref());
     SpawnAgentOptions {
         fork_parent_spawn_call_id: Some(call_id.to_string()),
         fork_mode: Some(SpawnAgentForkMode::FullHistoryAtSamplingStart),
         parent_thread_id: Some(session.thread_id),
         parent_turn_id: Some(turn.sub_id.clone()),
+        turn_trigger: turn.turn_metadata_state.current_turn_trigger(),
         root_turn_id: turn.turn_metadata_state.root_turn_id(),
         environments: Some(step.environments.to_selections()),
         cyber_access_program: turn.cyber_access_program,
@@ -506,7 +500,8 @@ fn spawn_options(
             || {
                 resolve_usage_hints(
                     &config.multi_agent_v2,
-                    catalog,
+                    codex_prompts::ResolvedModelMessages::from_model(&step.settings.model_info)
+                        .multi_agent(),
                     !config.update_plan_enabled && config.model_catalog.is_none(),
                 )
             },
@@ -754,57 +749,27 @@ fn task_envelope(task: &SpawnTask, call_tasks: &[SpawnTask]) -> String {
 }
 
 async fn wait_for_terminal(
-    control: &crate::agent::AgentControl,
+    control: &crate::agent::LocalAgentControl,
     parent_path: &AgentPath,
     child_path: &AgentPath,
     parent_thread_id: ThreadId,
     start_options: TurnStartOptions,
     thread_id: ThreadId,
 ) -> AgentStatus {
-    let Ok(mut status_rx) = control.subscribe_status(thread_id).await else {
-        return control.get_status(thread_id).await;
+    let status_rx = match control.subscribe_status(thread_id).await {
+        Ok(status_rx) => status_rx,
+        Err(error) => return AgentStatus::Errored(error.to_string()),
     };
-    let mut final_message_reminded = false;
-    loop {
-        let status = status_rx.borrow_and_update().clone();
-        if is_spawn_terminal(&status) {
-            if is_missing_final_message(&status) && !final_message_reminded {
-                final_message_reminded = true;
-                let correction = InterAgentCommunication::new(
-                    parent_path.clone(),
-                    child_path.clone(),
-                    Vec::new(),
-                    CORRECTION_MESSAGE.to_string(),
-                    /*trigger_turn*/ true,
-                );
-                let context = AgentCommunicationContext::new(
-                    AgentCommunicationKind::Message,
-                    parent_thread_id,
-                );
-                if let Err(error) = control
-                    .send_inter_agent_communication(
-                        thread_id,
-                        correction,
-                        context,
-                        start_options.clone(),
-                    )
-                    .await
-                {
-                    return AgentStatus::Errored(format!(
-                        "failed to request missing final memory: {error}"
-                    ));
-                }
-                if status_rx.changed().await.is_err() {
-                    return control.get_status(thread_id).await;
-                }
-                continue;
-            }
-            return status;
-        }
-        if status_rx.changed().await.is_err() {
-            return control.get_status(thread_id).await;
-        }
-    }
+    wait_for_terminal_after_resume(
+        control,
+        parent_path,
+        child_path,
+        parent_thread_id,
+        start_options,
+        thread_id,
+        status_rx,
+    )
+    .await
 }
 
 fn is_missing_final_message(status: &AgentStatus) -> bool {
@@ -927,20 +892,23 @@ fn normalized_progress_status(
 }
 
 async fn wait_for_terminal_after_resume(
-    control: &crate::agent::AgentControl,
+    control: &crate::agent::LocalAgentControl,
     parent_path: &AgentPath,
     child_path: &AgentPath,
     parent_thread_id: ThreadId,
     start_options: TurnStartOptions,
     thread_id: ThreadId,
-    mut status_rx: tokio::sync::watch::Receiver<AgentStatus>,
+    mut status_rx: StatusSubscription,
 ) -> AgentStatus {
-    if status_rx.changed().await.is_err() {
-        return control.get_status(thread_id).await;
-    }
     let mut final_message_reminded = false;
-    loop {
-        let status = status_rx.borrow_and_update().clone();
+    while let Some(update) = status_rx.next().await {
+        let snapshot = match update {
+            Ok(snapshot) => snapshot,
+            Err(error) => return AgentStatus::Errored(error.to_string()),
+        };
+        let Some(status) = snapshot.status().cloned() else {
+            continue;
+        };
         if is_spawn_terminal(&status) {
             if is_missing_final_message(&status) && !final_message_reminded {
                 final_message_reminded = true;
@@ -968,17 +936,12 @@ async fn wait_for_terminal_after_resume(
                         "failed to request missing final memory: {error}"
                     ));
                 }
-                if status_rx.changed().await.is_err() {
-                    return control.get_status(thread_id).await;
-                }
                 continue;
             }
             return status;
         }
-        if status_rx.changed().await.is_err() {
-            return control.get_status(thread_id).await;
-        }
     }
+    control.get_status(thread_id).await
 }
 
 fn capacity_rejection_receipt(

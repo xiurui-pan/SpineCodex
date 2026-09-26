@@ -21,6 +21,8 @@ async fn start_config_write_server_with_loader(
     let state_db =
         crate::init_state_db_for_app_server_target(&app.config, &crate::AppServerTarget::Embedded)
             .await?;
+    let embedded_network_policy =
+        codex_app_server_client::EmbeddedNetworkPolicy::load(&loader_overrides).await;
     let client = crate::start_embedded_app_server(
         codex_arg0::Arg0DispatchPaths::default(),
         app.config.clone(),
@@ -32,6 +34,7 @@ async fn start_config_write_server_with_loader(
         /*log_db*/ None,
         state_db,
         app.environment_manager.clone(),
+        embedded_network_policy,
     )
     .await?;
     Ok(AppServerSession::new(
@@ -116,6 +119,45 @@ async fn spine_spawn_settings_persist_in_one_native_config_write() -> Result<()>
     );
 
     app_server.shutdown().await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn spine_spawn_capacity_only_edit_preserves_enabled_state() -> Result<()> {
+    for enabled in [true, false] {
+        let (mut app, _app_event_rx, mut op_rx) = make_test_app_with_channels().await;
+        let codex_home = tempdir()?;
+        std::fs::write(
+            codex_home.path().join("config.toml"),
+            format!(
+                "spine_spawn = {{ max_concurrent_threads_per_session = 6 }}\n\n[features]\nspine_spawn = {enabled}\n"
+            ),
+        )?;
+        app.config = ConfigBuilder::default()
+            .codex_home(codex_home.path().to_path_buf())
+            .build()
+            .await?;
+        app.chat_widget
+            .set_feature_enabled(Feature::SpineSpawn, enabled);
+        app.chat_widget
+            .set_spine_spawn_max_concurrent_threads_per_session(6);
+        let mut app_server = start_config_write_test_app_server(&app).await?;
+
+        app.update_feature_flags(
+            &mut app_server,
+            Vec::new(),
+            /*spine_spawn_max_concurrent_threads_per_session*/ Some(10),
+        )
+        .await;
+
+        assert_spine_spawn_runtime_state(&app, enabled, /*max_threads*/ 10);
+        assert_eq!(
+            spine_spawn_values(&parsed_user_config(codex_home.path())?),
+            (Some(enabled), Some(10))
+        );
+        assert!(op_rx.try_recv().is_err());
+        app_server.shutdown().await?;
+    }
     Ok(())
 }
 

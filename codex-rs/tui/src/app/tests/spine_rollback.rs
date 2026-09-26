@@ -24,6 +24,7 @@ fn submit_user_turn(
     text: &str,
 ) -> impl std::future::Future<Output = Result<()>> {
     let turn = AppCommand::user_turn(
+        uuid::Uuid::new_v4().to_string(),
         vec![UserInput::Text {
             text: text.to_string(),
             text_elements: Vec::new(),
@@ -118,47 +119,6 @@ async fn drive_turn_until_complete(
     }
 }
 
-async fn wait_for_replayed_spine_tree(
-    app: &mut App,
-    app_event_rx: &mut tokio::sync::mpsc::UnboundedReceiver<AppEvent>,
-    tui: &mut tui::Tui,
-    app_server: &mut AppServerSession,
-    thread_id: ThreadId,
-    active_node_id: &str,
-) -> Result<Vec<SpineTreeUpdatedNotification>> {
-    let mut snapshots = Vec::new();
-    let timeout = tokio::time::sleep(Duration::from_secs(/*secs*/ 15));
-    tokio::pin!(timeout);
-    loop {
-        tokio::select! {
-            event = app_server.next_event() => {
-                let event = event.expect("embedded app-server stream should remain open");
-                if let AppServerEvent::ServerNotification(notification) = &event
-                    && let ServerNotification::SpineTreeUpdated(snapshot) = notification.as_ref()
-                    && snapshot.thread_id == thread_id.to_string()
-                {
-                    snapshots.push(snapshot.clone());
-                }
-                app.handle_app_server_event(app_server, event).await;
-            }
-            event = app_event_rx.recv() => {
-                let event = event.expect("app event stream should remain open");
-                app.handle_event(tui, app_server, event).await?;
-            }
-            () = &mut timeout => panic!(
-                "timed out waiting for replayed Spine node {active_node_id} on {thread_id}"
-            ),
-        }
-        drain_queued_app_events(app, app_event_rx, tui, app_server).await?;
-        if snapshots
-            .iter()
-            .any(|snapshot| snapshot.active_node_id == active_node_id)
-        {
-            return Ok(snapshots);
-        }
-    }
-}
-
 async fn mount_rollback_flow(server: &wiremock::MockServer) -> ResponseMock {
     let retained_open = sse(vec![
         ev_response_created("retained-open-response"),
@@ -247,11 +207,6 @@ spine_jit = true
     let mut app_server = Box::pin(crate::start_embedded_app_server_for_picker(&app.config)).await?;
     let started = app_server.start_thread(&app.config).await?;
     let source_thread_id = started.session.thread_id;
-    let source_rollout_path = started
-        .session
-        .rollout_path
-        .clone()
-        .expect("persistent source thread should expose its rollout path");
     app.replace_chat_widget_with_app_server_thread(
         &mut tui,
         started,
@@ -322,38 +277,59 @@ spine_jit = true
             "new live turns should still reside only in the replay buffer"
         );
     }
-    let source_before = std::fs::read_to_string(&source_rollout_path)?;
 
+    let selected_cell = Arc::clone(
+        &app.transcript_cells[nth_user_position(&app.transcript_cells, /*nth*/ 1)
+            .expect("discarded prompt should be visible")],
+    );
     app.handle_event(
         &mut tui,
         &mut app_server,
-        AppEvent::ForkSessionForPromptEdit {
+        AppEvent::RevertSessionForPromptEdit {
             thread_id: source_thread_id,
-            nth_user_message: 1,
+            selected_cell,
             prompt: crate::chatwidget::UserMessage::from("open discarded task"),
         },
     )
     .await?;
-    let forked_thread_id = app
+    tokio::time::timeout(Duration::from_secs(/*secs*/ 15), async {
+        loop {
+            let event = app_server
+                .next_event()
+                .await
+                .expect("embedded app-server stream should remain open");
+            let restored = matches!(
+                &event,
+                AppServerEvent::ServerNotification(notification)
+                    if matches!(notification.as_ref(), ServerNotification::SpineTreeUpdated(snapshot)
+                        if snapshot.thread_id == source_thread_id.to_string())
+            );
+            app.handle_app_server_event(&app_server, event).await;
+            if restored {
+                break;
+            }
+        }
+    })
+    .await
+    .expect("revert should publish the restored Spine tree");
+    drain_queued_app_events(&mut app, &mut app_event_rx, &mut tui, &mut app_server).await?;
+    let reverted_thread_id = app
         .chat_widget
         .thread_id()
-        .expect("prompt edit should attach the forked thread");
-    assert_ne!(forked_thread_id, source_thread_id);
-    assert!(!app.spine_tree_views.contains_key(&source_thread_id));
+        .expect("prompt edit should attach the reverted thread");
+    assert_eq!(reverted_thread_id, source_thread_id);
     app.chat_widget.setup_status_line(
         vec![StatusLineItem::SpineNode],
         /*use_theme_colors*/ true,
     );
 
-    let mut forked_snapshots = wait_for_replayed_spine_tree(
-        &mut app,
-        &mut app_event_rx,
-        &mut tui,
-        &mut app_server,
-        forked_thread_id,
-        "1.1",
-    )
-    .await?;
+    let mut reverted_snapshots = vec![
+        app.spine_tree_views
+            .get(&reverted_thread_id)
+            .and_then(crate::history_cell::SpineTreeViewState::snapshot)
+            .expect("revert should restore the retained Spine tree")
+            .clone(),
+    ];
     assert_eq!(
         app.chat_widget.status_line_text(),
         Some("1.1 retained task".to_string())
@@ -362,30 +338,30 @@ spine_jit = true
     submit_user_turn(
         &mut app,
         &mut app_server,
-        forked_thread_id,
+        reverted_thread_id,
         "confirm rollback state",
     )
     .await?;
-    forked_snapshots.extend(
+    reverted_snapshots.extend(
         drive_turn_until_complete(
             &mut app,
             &mut app_event_rx,
             &mut tui,
             &mut app_server,
-            forked_thread_id,
+            reverted_thread_id,
         )
         .await?,
     );
 
-    assert!(forked_snapshots.iter().all(|snapshot| {
+    assert!(reverted_snapshots.iter().all(|snapshot| {
         snapshot.active_node_id == "1.1"
             && !snapshot.nodes.iter().any(|node| node.node_id == "1.1.1")
     }));
     let final_snapshot = app
         .spine_tree_views
-        .get(&forked_thread_id)
+        .get(&reverted_thread_id)
         .and_then(crate::history_cell::SpineTreeViewState::snapshot)
-        .expect("forked TUI should retain the replayed Spine tree");
+        .expect("reverted TUI should retain the replayed Spine tree");
     assert_eq!(final_snapshot.active_node_id, "1.1");
     assert!(
         !final_snapshot
@@ -398,14 +374,18 @@ spine_jit = true
         Some("1.1 retained task".to_string())
     );
     let requests = request_log.requests();
-    let forked_request = requests
+    let reverted_request = requests
         .last()
-        .expect("fork follow-up should have a captured Responses request");
-    let forked_request_body = forked_request.body_json().to_string();
-    assert!(forked_request_body.contains("retained task"));
-    assert!(!forked_request_body.contains("open discarded task"));
-    assert!(!forked_request_body.contains("1.1.1"));
-    assert_eq!(std::fs::read_to_string(source_rollout_path)?, source_before);
+        .expect("revert follow-up should have a captured Responses request");
+    let reverted_request_body = reverted_request.body_json().to_string();
+    assert!(reverted_request_body.contains("retained task"));
+    assert!(!reverted_request_body.contains("open discarded task"));
+    assert!(!reverted_request_body.contains("1.1.1"));
+    let history = app_server
+        .thread_read(reverted_thread_id, /*include_turns*/ true)
+        .await?;
+    let history_json = serde_json::to_string(&history.turns)?;
+    assert!(!history_json.contains("open discarded task"));
     assert_eq!(request_log.requests().len(), 5);
     app_server.shutdown().await?;
 

@@ -10,7 +10,11 @@ async fn failed_checkpoint_keeps_the_previous_history_and_window() {
     .expect("create Spine session");
     let turn_context = session.new_default_turn().await;
     session
-        .record_conversation_items(&turn_context, &[user_message("history before compaction")])
+        .record_conversation_items(
+            &turn_context,
+            turn_context.model_info(),
+            &[user_message("history before compaction")],
+        )
         .await;
     let step_context = session
         .capture_step_context(Arc::clone(&turn_context), &CancellationToken::new())
@@ -77,12 +81,16 @@ async fn fork_checkpoint_keeps_parent_guardian_evidence_local() -> anyhow::Resul
     let parent_checkpoint = codex_history::GuardianHistoryCheckpoint(vec![user_message(
         "parent-local review evidence",
     )]);
-    session
-        .state
-        .lock()
-        .await
-        .history
-        .restore_guardian_history(Some(&parent_checkpoint));
+    let mut history = crate::context_manager::ContextManager::with_guardian_context_mode(
+        crate::context::GuardianContextMode::Legacy,
+        &SessionSource::default(),
+    );
+    history.restore_review_context(
+        /*retained_context*/ None,
+        Some(&parent_checkpoint),
+        /*reviewer_compaction_hash*/ None,
+    );
+    session.state.lock().await.history = history;
     let child_item = user_message("child-visible task");
     let history = session
         .checkpoint_spine_fork_context(&[], &[RolloutItem::ResponseItem(child_item.clone().into())])

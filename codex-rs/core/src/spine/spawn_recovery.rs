@@ -3,15 +3,16 @@ use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Duration;
 
+use crate::agent::api::StatusSubscription;
 use codex_protocol::AgentPath;
 use codex_protocol::ThreadId;
 use codex_protocol::user_input::UserInput;
+use futures::StreamExt;
 use futures::future::join_all;
 use spine_core::host::SpawnOutcome;
 use spine_core::host::SpawnReceipt;
 use spine_core::host::SpawnResult;
 use spine_core::host::SpawnTask;
-use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 
 use crate::agent::AgentStatus;
@@ -49,7 +50,7 @@ const CONTINUE_AFTER_FAILURE_MESSAGE: &str = concat!(
 struct AttemptWait {
     ordinal: usize,
     thread_id: ThreadId,
-    resume_status: Option<watch::Receiver<AgentStatus>>,
+    resume_status: Option<StatusSubscription>,
 }
 
 impl AttemptWait {
@@ -61,11 +62,7 @@ impl AttemptWait {
         }
     }
 
-    fn resumed(
-        ordinal: usize,
-        thread_id: ThreadId,
-        resume_status: watch::Receiver<AgentStatus>,
-    ) -> Self {
+    fn resumed(ordinal: usize, thread_id: ThreadId, resume_status: StatusSubscription) -> Self {
         Self {
             ordinal,
             thread_id,
@@ -537,7 +534,29 @@ async fn continue_failed_branches(
         };
         match control.subscribe_status(thread_id).await {
             Ok(mut status_rx) => {
-                status_rx.borrow_and_update();
+                // Consume the pre-continuation snapshot before sending new input.
+                // The remaining stream then observes only this attempt's status changes.
+                match status_rx.next().await {
+                    Some(Ok(_)) => {}
+                    Some(Err(error)) => {
+                        results[*ordinal] = Some(error_result(
+                            *ordinal,
+                            SpawnOutcome::Errored,
+                            format!("child cannot continue: {error}"),
+                            Some(thread_id.to_string()),
+                        ));
+                        continue;
+                    }
+                    None => {
+                        results[*ordinal] = Some(error_result(
+                            *ordinal,
+                            SpawnOutcome::Errored,
+                            "child status subscription ended before continuation".to_string(),
+                            Some(thread_id.to_string()),
+                        ));
+                        continue;
+                    }
+                }
                 pending.push((*ordinal, thread_id, status_rx));
             }
             Err(error) => {

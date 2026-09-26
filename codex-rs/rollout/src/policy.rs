@@ -19,6 +19,7 @@ pub fn is_persisted_rollout_item(item: &RolloutItem, history_mode: ThreadHistory
         | RolloutItem::TurnContext(_)
         | RolloutItem::TokenUsageRecord(_)
         | RolloutItem::WorldState(_)
+        | RolloutItem::RetainedContext(_)
         | RolloutItem::SecurityRiskScore(_)
         | RolloutItem::SessionMeta(_)
         | RolloutItem::SpineSamplingStarted(_)
@@ -56,6 +57,7 @@ pub fn should_persist_response_item(item: &ResponseItem) -> bool {
         | ResponseItem::CustomToolCallOutput { .. }
         | ResponseItem::WebSearchCall { .. }
         | ResponseItem::ImageGenerationCall { .. }
+        | ResponseItem::ConfigurationUpdate { .. }
         | ResponseItem::Compaction { .. }
         | ResponseItem::ContextCompaction { .. } => true,
         ResponseItem::AdditionalTools { .. }
@@ -80,6 +82,7 @@ pub fn should_persist_response_item_for_memories(item: &ResponseItem) -> bool {
         | ResponseItem::WebSearchCall { .. } => true,
         ResponseItem::AdditionalTools { .. }
         | ResponseItem::Reasoning { .. }
+        | ResponseItem::ConfigurationUpdate { .. }
         | ResponseItem::ImageGenerationCall { .. }
         | ResponseItem::Compaction { .. }
         | ResponseItem::CompactionTrigger { .. }

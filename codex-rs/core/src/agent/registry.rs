@@ -1,3 +1,4 @@
+use crate::agent::types::AgentMetadata;
 use codex_protocol::AgentPath;
 use codex_protocol::ThreadId;
 use codex_protocol::error::CodexErr;
@@ -22,7 +23,7 @@ use tokio::sync::RwLockWriteGuard;
 /// the current implementation, it limits:
 /// * Total number of sub-agents (i.e. threads) per user session
 ///
-/// This structure is shared by all agents in the same user session (because the `AgentControl`
+/// This structure is shared by all agents in the same user session (because the `LocalAgentControl`
 /// is).
 #[derive(Default)]
 pub(crate) struct AgentRegistry {
@@ -51,15 +52,6 @@ impl RegisteredAgent {
             evicted_environments: None,
         }
     }
-}
-
-#[derive(Clone, Debug, Default)]
-pub(crate) struct AgentMetadata {
-    pub(crate) agent_id: Option<ThreadId>,
-    pub(crate) agent_path: Option<AgentPath>,
-    pub(crate) agent_nickname: Option<String>,
-    pub(crate) agent_role: Option<String>,
-    pub(crate) suppress_parent_completion_notification: bool,
 }
 
 fn format_agent_nickname(name: &str, nickname_reset_count: usize) -> String {

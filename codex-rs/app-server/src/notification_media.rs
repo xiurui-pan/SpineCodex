@@ -47,6 +47,7 @@ pub(crate) fn without_notification_media(notification: ServerNotification) -> Se
                 | ResponseItem::ToolSearchOutput { .. }
                 | ResponseItem::WebSearchCall { .. }
                 | ResponseItem::Compaction { .. }
+                | ResponseItem::ConfigurationUpdate { .. }
                 | ResponseItem::CompactionTrigger { .. }
                 | ResponseItem::ContextCompaction { .. }
                 | ResponseItem::Other => {}
@@ -66,6 +67,7 @@ pub(crate) fn without_notification_media(notification: ServerNotification) -> Se
         | ServerNotification::SpineSpawnProgressUpdated(_)
         | ServerNotification::SkillsChanged(_)
         | ServerNotification::ThreadNameUpdated(_)
+        | ServerNotification::ThreadAttachmentUpdated(_)
         | ServerNotification::ThreadGoalUpdated(_)
         | ServerNotification::ThreadGoalCleared(_)
         | ServerNotification::ThreadQueueChanged(_)
@@ -135,7 +137,8 @@ pub(crate) fn without_notification_media(notification: ServerNotification) -> Se
         | ServerNotification::ThreadRealtimeClosed(_)
         | ServerNotification::WindowsWorldWritableWarning(_)
         | ServerNotification::WindowsSandboxSetupCompleted(_)
-        | ServerNotification::AccountLoginCompleted(_) => notification,
+        | ServerNotification::AccountLoginCompleted(_)
+        | ServerNotification::GatewayOAuthChanged(_) => notification,
     }
 }
 

@@ -1,0 +1,7 @@
+---
+source: tui/src/chatwidget/tests/app_server.rs
+expression: rendered
+---
+Spine Codex (v<VERSION>)
+model: us.openai.gpt-5.6-luna high
+directory: /tmp/thread-settings

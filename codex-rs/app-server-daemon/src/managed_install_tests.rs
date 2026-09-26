@@ -10,11 +10,11 @@ async fn product_probe_does_not_confuse_upstream_compatibility_with_product_vers
     let executable = directory.path().join("codex");
     std::fs::write(&executable, r#"#!/bin/sh
 case "$1" in
-  --version) printf 'spine-codex 0.153.4\n' ;;
-  mcp-server)
+  --version) printf 'spine-codex 0.157.1\n' ;;
+  app-server)
     read -r request
     case "$request" in
-      *'"method":"initialize"'*) printf '%s\n' '{"jsonrpc":"2.0","id":1,"result":{"serverInfo":{"name":"codex-mcp-server","version":"0.4.0"}}}' ;;
+      *'"method":"initialize"'*) printf '%s\n' '{"id":1,"result":{"userAgent":"codex_cli_rs/0.4.0 (Linux) codex_app_server_daemon"}}' ;;
       *) exit 2 ;;
     esac ;;
   *) exit 3 ;;

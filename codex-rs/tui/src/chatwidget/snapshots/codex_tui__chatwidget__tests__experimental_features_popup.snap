@@ -1,15 +1,18 @@
 ---
 source: tui/src/chatwidget/tests/popups_and_settings.rs
+assertion_line: 3086
 expression: popup
 ---
   Experimental features
-  Changes are saved to config.toml and apply to new sessions.
+  Checked features are configured on. Some experimental features take effect
+  only in new tasks or after restarting the Codex server.
 
-› [ ] JavaScript REPL                           Enable a persistent Node-
-                                                backed JavaScript REPL for
-                                                interactive website debugging
-                                                and other inline JavaScript
-                                                execution capabilities.
+
+› [ ] JavaScript REPL                           Enable a persistent Node-backed
+                                                JavaScript REPL for interactive
+                                                website debugging and other
+                                                inline JavaScript execution
+                                                capabilities.
   [ ] Spine spawn  Concurrent branch agents: 4  Run differentiated Spine
                                                 branches concurrently and join
                                                 their results. Disabled by
@@ -17,5 +20,7 @@ expression: popup
                                                 sessions.
   [x] Shell tool                                Allow the model to run shell
                                                 commands.
+  [ ] Voice conversations                       Talk with Codex using /voice.
+
 
   space toggle  enter save for next session
