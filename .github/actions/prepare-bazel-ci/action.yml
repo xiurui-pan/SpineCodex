@@ -1,6 +1,9 @@
 name: prepare-bazel-ci
 description: Prepare a Bazel CI job with shared setup, repository cache restore, and execution logs.
 inputs:
+  msvc-environment:
+    description: Initialize MSVC or reuse the target environment already configured by the caller.
+    default: initialize
   target:
     description: Target triple used for setup and cache namespacing.
     required: true
@@ -26,6 +29,7 @@ runs:
       uses: ./.github/actions/setup-bazel-ci
       with:
         target: ${{ inputs.target }}
+        msvc-environment: ${{ inputs.msvc-environment }}
 
     - name: Compute bazel repository cache key
       id: cache_bazel_repository_key

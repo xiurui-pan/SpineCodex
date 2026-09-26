@@ -26,15 +26,8 @@ runs:
       with:
         target: ${{ inputs.target }}
         cache-scope: release-voice-windows
-    - uses: ./.github/actions/setup-msvc-env
-      if: runner.os == 'Windows'
-      with:
-        target: ${{ inputs.target }}
-    - name: Refresh Bazel PATH for the selected MSVC target
-      if: runner.os == 'Windows'
-      shell: pwsh
-      working-directory: ${{ github.workspace }}
-      run: ./.github/scripts/compute-bazel-windows-path.ps1
+        # spine-release already initialized the native target before its Cargo build.
+        msvc-environment: reuse
     - name: Download pinned Windows build inputs
       if: runner.os == 'Windows'
       shell: pwsh
